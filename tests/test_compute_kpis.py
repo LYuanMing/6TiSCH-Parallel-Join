@@ -5,6 +5,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import types
 
 import pytest
@@ -35,11 +36,10 @@ def run_compute_kpis_py():
         '../bin',
         'compute_kpis.py'
     )
-    return subprocess.check_output(
-        '{0} \'{1}\''.format(
-            'python',
+    return subprocess.check_output([
+            sys.executable,
             compute_kpis_path
-        ),
+        ],
         shell=True
     ).decode('utf-8').split('\n')
 

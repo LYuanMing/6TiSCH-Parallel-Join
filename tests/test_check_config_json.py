@@ -1,7 +1,7 @@
 import json
 import os
 import subprocess
-
+import sys
 import pytest
 
 
@@ -44,7 +44,7 @@ def test_check_config_json(fixture_test_type):
     try:
         if fixture_test_type == 'success':
             subprocess.check_output(
-                [check_config_json, '-c', config_json]
+                [sys.executable, check_config_json, '-c', config_json]
             )
         elif fixture_test_type == 'not found':
             config_json = os.path.join(
@@ -54,7 +54,7 @@ def test_check_config_json(fixture_test_type):
             )
             expected_error_message = 'config.json is not found'
             popen = subprocess.Popen(
-                [check_config_json, '-c', config_json],
+                [sys.executable, check_config_json, '-c', config_json],
                 stderr = subprocess.PIPE
             )
             stdoutdata, stderrdata = popen.communicate()
@@ -62,7 +62,7 @@ def test_check_config_json(fixture_test_type):
         elif fixture_test_type == 'not json':
             wrong_config = u'garbage text' + json.dumps(config)
             popen = subprocess.Popen(
-                [check_config_json, '-c', '-'],
+                [sys.executable, check_config_json, '-c', '-'],
                 stdin = subprocess.PIPE,
                 stderr = subprocess.PIPE
             )
@@ -72,7 +72,7 @@ def test_check_config_json(fixture_test_type):
             # remove sf_class from config
             config['settings']['regular'].pop('sf_class')
             popen = subprocess.Popen(
-                [check_config_json, '-c', '-'],
+                [sys.executable, check_config_json, '-c', '-'],
                 stdin = subprocess.PIPE,
                 stderr = subprocess.PIPE
             )
@@ -81,7 +81,7 @@ def test_check_config_json(fixture_test_type):
         elif fixture_test_type == 'unsupported setting':
             config['settings']['regular']['dummy_setting'] = 'garbage'
             popen = subprocess.Popen(
-                [check_config_json, '-c', '-'],
+                [sys.executable, check_config_json, '-c', '-'],
                 stdin = subprocess.PIPE,
                 stderr = subprocess.PIPE
             )

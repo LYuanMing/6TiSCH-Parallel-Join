@@ -65,7 +65,7 @@ While 6TiSCH Simulator has been tested with Python 2.7, it should work with Pyth
 
 1. Download the code:
    ```
-   $ git clone https://bitbucket.org/6tisch/simulator.git
+   $ git clone https://github.com/LYuanMing/6TiSCH-Parallel-Join.git
    ```
 1. Install the Python dependencies:
    `cd simulator` and `pip install -r requirements.txt`

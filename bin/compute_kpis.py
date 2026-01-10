@@ -385,7 +385,6 @@ def kpis_all(inputfile):
                 }
             ]
         }
-
     # === remove unnecessary stats
 
     for (run_id, per_mote_stats) in list(allstats.items()):

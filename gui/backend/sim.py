@@ -121,7 +121,12 @@ def put_default_config(config_str):
         stdout = subprocess.PIPE,
         stderr = subprocess.PIPE
     )
-    _, stderrdata = popen.communicate(json.dumps(new_config))
+    dumped_config = json.dumps(new_config)
+    if dumped_config is not None:
+        dumped_config = dumped_config.encode("utf-8")
+    
+    assert type(dumped_config) == bytes, type(dumped_config)
+    _, stderrdata = popen.communicate(dumped_config)
 
     if popen.returncode == 0:
         # if the check succeeds, update the default config.json

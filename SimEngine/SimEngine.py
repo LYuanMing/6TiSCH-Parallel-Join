@@ -43,7 +43,7 @@ class DiscreteEventEngine(threading.Thread):
         return cls._instance
     #===== end singleton
 
-    def __init__(self, cpuID=None, run_id=None, verbose=False):
+    def __init__(self, cpuID=None, run_id=None, verbose=True):
 
         #===== singleton
         cls = type(self)
@@ -395,6 +395,7 @@ class SimEngine(DiscreteEventEngine):
         else:
             eui64_table = [None] * self.settings.exec_numMotes
 
+        # here the engine creates all motes
         self.motes = [
             Mote.Mote.Mote(id, eui64)
             for id, eui64 in zip(

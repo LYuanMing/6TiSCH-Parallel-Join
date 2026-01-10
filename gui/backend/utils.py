@@ -39,7 +39,6 @@ def start_server(dev_mode=False):
         os.mkdir(backend.BACKEND_VAR_DIR_PATH)
 
     # initialize eel
-    breakpoint()
     backend.init_web_root_path(dev_mode)
     web_root = backend.get_web_root_path()
     eel.init(web_root)

@@ -145,7 +145,8 @@ if __name__ == '__main__':
         if args.config_json == '-':
             # read from stdin
             config_json_path = 'STDIN'
-            config = json.loads(sys.stdin.read())
+            raw_config = sys.stdin.read()
+            config = json.loads(raw_config)
         else:
             config_json_path = os.path.abspath(args.config_json)
             with open(config_json_path, 'r') as f:

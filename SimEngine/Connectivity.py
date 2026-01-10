@@ -921,13 +921,16 @@ class ConnectivityMatrixRandom(ConnectivityMatrixBase):
                             (len(self.coordinates) <= init_min_neighbors)
                             and
                             (len(self.coordinates) == good_pdr_count)
-                        )
+                        )   # case of the early stage of deployment
+                            # if the number of deployed motes is smaller than init_min_neighbors requirements, 
+                            # then it only need to meet the requirements of all deployed motes
                         or
                         (
                             (init_min_neighbors < len(self.coordinates))
                             and
                             (init_min_neighbors <= good_pdr_count)
-                        )
+                        )   # normal case, 
+                            # after enough motes are deployed, it needs to meet init_min_neighbors requirement
                     ):
                     # fix the coordinate of the mote
                     self.coordinates[target_mote_id] = coordinate
@@ -1118,177 +1121,3 @@ class PisterHackModel(object):
             pow((b[0] - a[0]), 2) +
             pow((b[1] - a[1]), 2)
         )
-
-class ConnectivityMatrixMultiPHY(ConnectivityMatrixBase):
-    """Random (topology) connectivity using different physical layer model
-
-    inherit from ConnectivityMatrixRandom
-
-    """
-
-    def _additional_initialization(self):
-        # additional local variables
-        self.coordinates = {}  # (x, y) indexed by mote_id
-        self.sparklinkPHY = SparklinkLowEnergyModel(self.engine)
-
-        # ConnectivityRandom doesn't need the connectivity matrix. Instead, it
-        # initializes coordinates of the motes. Its algorithm is:
-        #
-        # step.1 if moteid is 0
-        #   step.1-1 set (0, 0) to its coordinate
-        # step.2 otherwise
-        #   step.2-1 set its (tentative) coordinate randomly
-        #   step.2-2 count the number of neighbors with sufficient PDR (N)
-        #   step.2-3 if the number of deployed motes are smaller than
-        #          STABLE_NEIGHBORS
-        #     step.2-3-1 if N is equal to the number of deployed motes, fix the
-        #                coordinate of the mote
-        #     step.2-3-2 otherwise, go back to step.2-1
-        #   step.2-4 otherwise,
-        #     step.2-4 if N is equal to or larger than STABLE_NEIGHBORS, fix
-        #                the coordinate of the mote
-        #     step.2-5 otherwise, go back to step.2-1
-
-        # for quick access
-        square_side        = self.settings.conn_random_square_side
-        init_min_pdr       = self.settings.conn_random_init_min_pdr
-        init_min_neighbors = self.settings.conn_random_init_min_neighbors
-
-        assert init_min_neighbors <= self.settings.exec_numMotes
-
-        # determine coordinates of the motes
-        for target_mote_id in self.mote_id_list:
-            mote_is_deployed = False
-            while mote_is_deployed is False:
-
-                # select a tentative coordinate
-                if target_mote_id == 0:
-                    self.coordinates[target_mote_id] = (0, 0)
-                    mote_is_deployed = True
-                    continue
-
-                coordinate = (
-                    square_side * random.random(),
-                    square_side * random.random()
-                )
-
-                # count deployed motes who have enough PDR values to this
-                # mote
-                good_pdr_count = 0
-                base_channel = d.TSCH_HOPPING_SEQUENCE[0]
-                for deployed_mote_id in self.coordinates:
-                    rssi = self.pister_hack.compute_rssi(
-                        {
-                            u'mote'      : self._get_mote(target_mote_id),
-                            u'coordinate': coordinate
-                        },
-                        {
-                            u'mote'      : self._get_mote(deployed_mote_id),
-                            u'coordinate': self.coordinates[deployed_mote_id]
-                        }
-                    )
-                    pdr = self.pister_hack.convert_rssi_to_pdr(rssi)
-                    # memorize the rssi and pdr values at the base channel
-                    self.set_pdr_both_directions(
-                        target_mote_id,
-                        deployed_mote_id,
-                        base_channel,
-                        pdr
-                    )
-                    self.set_rssi_both_directions(
-                        target_mote_id,
-                        deployed_mote_id,
-                        base_channel,
-                        rssi
-                    )
-
-                    if init_min_pdr <= pdr:
-                        good_pdr_count += 1
-
-                # determine whether we deploy this mote or not
-                if (
-                        (
-                            (len(self.coordinates) <= init_min_neighbors)
-                            and
-                            (len(self.coordinates) == good_pdr_count)
-                        )
-                        or
-                        (
-                            (init_min_neighbors < len(self.coordinates))
-                            and
-                            (init_min_neighbors <= good_pdr_count)
-                        )
-                    ):
-                    # fix the coordinate of the mote
-                    self.coordinates[target_mote_id] = coordinate
-                    # copy the rssi and pdr values to other channels
-                    for deployed_mote_id in list(self.coordinates.keys()):
-                        rssi = self.get_rssi(
-                            target_mote_id,
-                            deployed_mote_id,
-                            base_channel
-                        )
-                        pdr  = self.get_pdr(
-                            target_mote_id,
-                            deployed_mote_id,
-                            base_channel
-                        )
-                        for channel in d.TSCH_HOPPING_SEQUENCE[:self.num_channels]:
-                            if channel == base_channel:
-                                # do nothing
-                                pass
-                            else:
-                                self.set_pdr_both_directions(
-                                    target_mote_id,
-                                    deployed_mote_id,
-                                    channel,
-                                    pdr
-                                )
-                                self.set_rssi_both_directions(
-                                    target_mote_id,
-                                    deployed_mote_id,
-                                    channel,
-                                    rssi
-                                )
-
-                    mote_is_deployed = True
-                else:
-                    # remove memorized values at channel 0
-                    for deployed_mote_id in self.coordinates:
-                        self._clear_rssi(
-                            target_mote_id,
-                            deployed_mote_id,
-                            base_channel
-                        )
-                        self._clear_pdr(
-                            target_mote_id,
-                            deployed_mote_id,
-                            base_channel
-                        )
-                    # try another random coordinate
-                    continue
-
-    def _get_mote(self, mote_id):
-        # there must be a mote having mote_id. otherwise, the following line
-        # raises an exception.
-        return [mote for mote in self.engine.motes if mote.id == mote_id][0]
-
-    def _clear_rssi(self, mote_id_1, mote_id_2, channel):
-        self.set_rssi_both_directions(
-            mote_id_1,
-            mote_id_2,
-            channel,
-            self.LINK_NONE[u'rssi']
-        )
-
-    def _clear_pdr(self, mote_id_1, mote_id_2, channel):
-        self.set_rssi_both_directions(
-            mote_id_1,
-            mote_id_2,
-            channel,
-            self.LINK_NONE[u'pdr']
-        )
-
-
-class SparklinkLowEnergyModel(object):
-    pass

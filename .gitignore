@@ -12,6 +12,9 @@ Thumbs.db
 /bin/simData/
 /gui/simData/
 /gui/backend/var/
+/simData/
+/.vscode/
+/tests/simData/
 
 # pycharm
 .idea/

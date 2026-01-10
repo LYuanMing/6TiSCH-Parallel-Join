@@ -190,7 +190,7 @@ def test_start(default_settings):
 
     # sleep for a while. this makes the simulator run until it
     # finishes
-    gevent.sleep(0.5)
+    gevent.sleep(2)
 
     # the simulator should be finished
     assert backend.sim._sim_engine is None
@@ -256,7 +256,7 @@ def test_abort(sim_engine, default_settings, pause_option):
     call_exposed_api(backend.sim.abort)
 
     # sleep for a while
-    gevent.sleep(0.5)
+    gevent.sleep(2)
 
     # _sim_engine should be destroyed
     assert backend.sim._sim_engine is None

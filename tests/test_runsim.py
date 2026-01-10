@@ -1,15 +1,18 @@
 import os
 import subprocess
-
+import sys
 #============================ helpers =========================================
 
 #============================ tests ===========================================
 
 def test_runSim():
     wd = os.getcwd()
-    os.chdir("bin/")
+    if wd.endswith("tests"):
+        os.chdir("../bin/")
+    else:
+        os.chdir("bin/")
     rc = subprocess.call(
-        "python runSim.py",
+        [sys.executable, 'runSim.py'],
         shell=True,
     )
     os.chdir(wd)

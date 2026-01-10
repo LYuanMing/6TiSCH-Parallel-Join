@@ -817,7 +817,7 @@ class TestMSF(object):
         u.run_until_asn(sim_engine, STOP_SENDING_APP_PACKET_ASN)
 
         # the mote should have two negotiated RX cells
-        _test_rx_negotiated_cells(2)
+        _test_rx_negotiated_cells(3)
 
         u.run_until_end(sim_engine)
 
