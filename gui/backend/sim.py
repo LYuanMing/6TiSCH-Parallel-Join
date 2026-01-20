@@ -19,13 +19,16 @@ import eel
 import gevent
 import psutil
 
+from SimEngine.SimConfig import SimConfig
+from SimEngine.SimEngineDefines import SECOND
 import backend
 import backend.utils
 from SimEngine import (
-    SimEngine,
+    MultiNetworkEngine,
     SimSettings,
     SimLog
 )
+from gui.backend.test.test_sim import sim_engine
 
 
 DUMMY_COMBINATION_KEYS = ['exec_numMotes']
@@ -87,7 +90,7 @@ def get_default_config():
         else:
             # it's an absolute path or None; it doesn't need the coversion
             pass
-
+    config = SimConfig.config_time_to_simulator_time(config)
     return config
 
 
@@ -95,6 +98,7 @@ def get_default_config():
 def put_default_config(config_str):
     try:
         config = json.loads(config_str)
+        config = SimConfig.simulator_time_to_config_time(config)
     except ValueError:
         return {
             'config': None,
@@ -223,6 +227,7 @@ def get_available_connectivities():
 
 @eel.expose
 def start(settings, log_notification_filter='all', stderr_redirect=True):
+    
     global _sim_engine
     global _elapsed_minutes
 
@@ -275,14 +280,15 @@ def start(settings, log_notification_filter='all', stderr_redirect=True):
         )
         if stderr_redirect is True:
             _redirect_stderr(redirect_to=open(crash_report_path, 'w'))
-
-        _sim_engine = SimEngine.SimEngine()
+        _sim_engine = MultiNetworkEngine.MultiNetworkSimEngineInstance()
+        _sim_engine._init_additional_local_variables()
         _elapsed_minutes = 0
-        _overwrite_sim_engine_actionEndSlotframe()
-
+        _overwrite_sim_engine_process_event()
         # start and wait until the simulation ends
         _sim_engine.start()
-        _sim_engine.join()
+        exc = _sim_engine.join()
+        if exc:
+            raise exc
     except Exception as e:
         ret_val['status'] = RETURN_STATUS_FAILURE
         ret_val['message'] = str(e)
@@ -333,7 +339,7 @@ def pause():
         # we cannot make the simulation pause on the current ASN because
         # of a limitation of the event scheduler; so we schedule pause on
         # the next ASN
-        _sim_engine.pauseAtAsn(_sim_engine.getAsn() + 1)
+        _sim_engine.pauseAtNextStep()
     except Exception as e:
         return {
             'status':  RETURN_STATUS_FAILURE,
@@ -458,32 +464,55 @@ def shutdown_backend():
         os.kill(parent_pid, signal.SIGINT)
 
 
-def _overwrite_sim_engine_actionEndSlotframe():
+def _overwrite_sim_engine_process_event():
     global _sim_engine
 
-    _sim_engine.original_actionEndSlotframe = _sim_engine._actionEndSlotframe
+    _sim_engine.original_process_events = _sim_engine._process_events
 
-    def _new_actionEndSlotframe(self):
+    def _new_process_event(self, *args, **kwargs):
         global _elapsed_minutes
-
-        self.original_actionEndSlotframe()
-        asn = _sim_engine.getAsn()
-        minutes = math.floor(old_div(asn * _sim_engine.settings.tsch_slotDuration, 60))
+        self.original_process_events(*args, **kwargs)
+        minutes = math.floor(_sim_engine.global_time / (SECOND * 60))
         if _elapsed_minutes < minutes:
-           _elapsed_minutes = minutes
-           eel.notifyLogEvent({
+            _elapsed_minutes = minutes
+            eel.notifyLogEvent({
                '_type': '_backend.tick.minute',
-               '_asn': asn,
+               '_asn': _sim_engine.getAsn(),
                'currentValue': _elapsed_minutes
            })
-        # we need to yield the CPU explicitly for other tasks because
-        # threading is monkey-patched by gevent. see __init__.py.
-        gevent.sleep(GEVENT_SLEEP_SECONDS_IN_SIM_ENGINE)
-
-    _sim_engine._actionEndSlotframe = types.MethodType(
-        _new_actionEndSlotframe,
+        if _sim_engine.getAsn() % _sim_engine.settings.tsch_slotframeLength == 0:
+            gevent.sleep(GEVENT_SLEEP_SECONDS_IN_SIM_ENGINE)
+    _sim_engine._process_events = types.MethodType(
+        _new_process_event,
         _sim_engine
     )
+
+# def _overwrite_sim_engine_actionEndSlotframe():
+#     global _sim_engine
+
+#     _sim_engine.original_actionEndSlotframe = _sim_engine._actionEndSlotframe
+
+#     def _new_actionEndSlotframe(self):
+#         global _elapsed_minutes
+
+#         self.original_actionEndSlotframe()
+#         asn = _sim_engine.getAsn()
+#         minutes = math.floor(old_div(asn * _sim_engine.settings.tsch_slotDuration, 60))
+#         if _elapsed_minutes < minutes:
+#            _elapsed_minutes = minutes
+#            eel.notifyLogEvent({
+#                '_type': '_backend.tick.minute',
+#                '_asn': asn,
+#                'currentValue': _elapsed_minutes
+#            })
+#         # we need to yield the CPU explicitly for other tasks because
+#         # threading is monkey-patched by gevent. see __init__.py.
+#         gevent.sleep(GEVENT_SLEEP_SECONDS_IN_SIM_ENGINE)
+
+#     _sim_engine._actionEndSlotframe = types.MethodType(
+#         _new_actionEndSlotframe,
+#         _sim_engine
+#     )
 
 
 def _overwrite_sim_log_log(log_notification_filter):
@@ -504,7 +533,7 @@ def _overwrite_sim_log_log(log_notification_filter):
         self.original_log(simlog, content)
 
         # content is expected to be updated adding _asn, _type
-        assert '_asn' in content
+        assert '_global_time' in content
         assert '_type' in content
 
         if (
@@ -557,9 +586,9 @@ def _destroy_sim():
 
     _sim_engine.destroy()
     sim_log.destroy()
-    connectivity.destroy()
+    if connectivity:
+        connectivity.destroy()
     sim_settings.destroy()
-
     _sim_engine = None
     _elapsed_minutes = 0
 

@@ -19,6 +19,7 @@ import netaddr
 
 # Simulator-wide modules
 import SimEngine
+from SimEngine.SimEngineDefines import SECOND
 from . import MoteDefines as d
 
 # =========================== defines =========================================
@@ -36,7 +37,8 @@ class Sixlowpan(object):
 
         # singletons (quicker access, instead of recreating every time)
         self.settings             = SimEngine.SimSettings.SimSettings()
-        self.engine               = SimEngine.SimEngine.SimEngine()
+        # self.engine               = SimEngine.SimEngine.SimEngine()
+        self.engine               = SimEngine.MultiNetworkEngine.MultiNetworkSimEngineInstance()
         self.log                  = SimEngine.SimLog.SimLog().log
 
         # local variables
@@ -388,7 +390,8 @@ class Fragmentation(object):
 
         # singletons (quicker access, instead of recreating every time)
         self.settings             = SimEngine.SimSettings.SimSettings()
-        self.engine               = SimEngine.SimEngine.SimEngine()
+        # self.engine               = SimEngine.SimEngine.SimEngine()
+        self.engine               = SimEngine.MultiNetworkEngine.MultiNetworkSimEngineInstance()
         self.log                  = SimEngine.SimLog.SimLog().log
 
         # local variables
@@ -544,7 +547,7 @@ class Fragmentation(object):
         datagram_size             = fragment[u'net'][u'datagram_size']
         datagram_offset           = fragment[u'net'][u'datagram_offset']
         incoming_datagram_tag     = fragment[u'net'][u'datagram_tag']
-        buffer_lifetime           = old_div(d.SIXLOWPAN_REASSEMBLY_BUFFER_LIFETIME, self.settings.tsch_slotDuration)
+        buffer_lifetime           = old_div(d.SIXLOWPAN_REASSEMBLY_BUFFER_LIFETIME * SECOND, self.settings.tsch_slotDuration)
 
         self._delete_expired_reassembly_buffer()
 
@@ -660,7 +663,7 @@ class FragmentForwarding(Fragmentation):
         datagram_offset       = fragment[u'net'][u'datagram_offset']
         incoming_datagram_tag = fragment[u'net'][u'datagram_tag']
         packet_length         = fragment[u'net'][u'packet_length']
-        entry_lifetime        = old_div(d.SIXLOWPAN_VRB_TABLE_ENTRY_LIFETIME, self.settings.tsch_slotDuration)
+        entry_lifetime        = old_div(d.SIXLOWPAN_VRB_TABLE_ENTRY_LIFETIME * SECOND, self.settings.tsch_slotDuration)
 
         self._delete_expired_vrb_table_entry()
 

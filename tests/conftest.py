@@ -6,10 +6,11 @@ import time
 from SimEngine import SimConfig,   \
                       SimSettings, \
                       SimLog,      \
-                      SimEngine,   \
+                      MultiNetworkEngine,   \
                       Connectivity
 from SimEngine.Mote.rpl import RplOFNone
 import SimEngine.Mote.MoteDefines as d
+from SimEngine.SimEngineDefines import SECOND
 from . import test_utils                 as u
 
 def pdr_not_null(c,p,engine):
@@ -25,7 +26,6 @@ def repeat4times(request):
 
 @pytest.fixture(scope="function")
 def sim_engine(request):
-
     def create_sim_engine(
             diff_config                                = {},
             force_initial_routing_and_scheduling_state = False,
@@ -39,7 +39,8 @@ def sim_engine(request):
         # add a finalizer
         def fin():
             if engine:
-                engine.connectivity.destroy()
+                if hasattr(engine, "connectivity") and engine.connectivity:
+                    engine.connectivity.destroy()
                 engine.destroy()
             if sim_log:
                 sim_log.destroy()
@@ -69,12 +70,12 @@ def sim_engine(request):
         sim_settings.setCombinationKeys([])
 
         # create sim log
-        sim_log = SimEngine.SimLog.SimLog()
+        sim_log = SimLog.SimLog()
         sim_log.set_log_filters('all') # do not log
 
         # create sim engine
-        engine = SimEngine.SimEngine(run_id=run_id)
-        
+        engine = MultiNetworkEngine.MultiNetworkSimEngineInstance(run_id=run_id)
+        engine._init_additional_local_variables()
         # force initial routing and schedule, if appropriate
         if force_initial_routing_and_scheduling_state:
             set_initial_routing_and_scheduling_state(engine)

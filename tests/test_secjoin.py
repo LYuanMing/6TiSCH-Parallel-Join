@@ -70,40 +70,40 @@ def test_unjoin_event(sim_engine):
     mote = sim_engine.motes[1]
     u.run_until_asn(sim_engine, 1)
 
-    assert not u.read_log_file(filter=['secjoin.joined'], after_asn=1)
-    assert not u.read_log_file(filter=['secjoin.unjoined'], after_asn=1)
-    assert not u.read_log_file(filter=['secjoin.failed'], after_asn=1)
+    assert not u.read_log_file(filter=['secjoin.joined'], after_global_time=sim_engine.global_time)
+    assert not u.read_log_file(filter=['secjoin.unjoined'], after_global_time=sim_engine.global_time)
+    assert not u.read_log_file(filter=['secjoin.failed'], after_global_time=sim_engine.global_time)
 
     # the mote has never completed the joining process, the the
     # following call should cause 'secjoin.failed' instead of
     # 'secjoin.unjoin'
     mote.secjoin.setIsJoined(False)
-    assert not u.read_log_file(filter=['secjoin.joined'], after_asn=1)
-    assert not u.read_log_file(filter=['secjoin.unjoined'], after_asn=1)
-    assert u.read_log_file(filter=['secjoin.failed'], after_asn=1)
+    assert not u.read_log_file(filter=['secjoin.joined'], after_global_time=sim_engine.global_time)
+    assert not u.read_log_file(filter=['secjoin.unjoined'], after_global_time=sim_engine.global_time)
+    assert u.read_log_file(filter=['secjoin.failed'], after_global_time=sim_engine.global_time)
 
     u.run_until_asn(sim_engine, 2)
 
-    assert not u.read_log_file(filter=['secjoin.joined'], after_asn=2)
-    assert not u.read_log_file(filter=['secjoin.unjoined'], after_asn=2)
-    assert not u.read_log_file(filter=['secjoin.failed'], after_asn=2)
+    assert not u.read_log_file(filter=['secjoin.joined'], after_global_time=sim_engine.global_time)
+    assert not u.read_log_file(filter=['secjoin.unjoined'], after_global_time=sim_engine.global_time)
+    assert not u.read_log_file(filter=['secjoin.failed'], after_global_time=sim_engine.global_time)
 
     # now make the mote joined
     mote.secjoin.setIsJoined(True)
-    assert u.read_log_file(filter=['secjoin.joined'], after_asn=2)
-    assert not u.read_log_file(filter=['secjoin.unjoined'], after_asn=2)
-    assert not u.read_log_file(filter=['secjoin.failed'], after_asn=2)
+    assert u.read_log_file(filter=['secjoin.joined'], after_global_time=sim_engine.global_time)
+    assert not u.read_log_file(filter=['secjoin.unjoined'], after_global_time=sim_engine.global_time)
+    assert not u.read_log_file(filter=['secjoin.failed'], after_global_time=sim_engine.global_time)
 
     u.run_until_asn(sim_engine, 3)
 
-    assert not u.read_log_file(filter=['secjoin.joined'], after_asn=3)
-    assert not u.read_log_file(filter=['secjoin.unjoined'], after_asn=3)
-    assert not u.read_log_file(filter=['secjoin.failed'], after_asn=3)
+    assert not u.read_log_file(filter=['secjoin.joined'], after_global_time=sim_engine.global_time)
+    assert not u.read_log_file(filter=['secjoin.unjoined'], after_global_time=sim_engine.global_time)
+    assert not u.read_log_file(filter=['secjoin.failed'], after_global_time=sim_engine.global_time)
 
     # while the mote is joined, the following call should cause
     # 'secjoin.unjoin'
     mote.secjoin.setIsJoined(False)
 
-    assert not u.read_log_file(filter=['secjoin.joined'], after_asn=3)
-    assert u.read_log_file(filter=['secjoin.unjoined'], after_asn=3)
-    assert not u.read_log_file(filter=['secjoin.failed'], after_asn=3)
+    assert not u.read_log_file(filter=['secjoin.joined'], after_global_time=sim_engine.global_time)
+    assert u.read_log_file(filter=['secjoin.unjoined'], after_global_time=sim_engine.global_time)
+    assert not u.read_log_file(filter=['secjoin.failed'], after_global_time=sim_engine.global_time)

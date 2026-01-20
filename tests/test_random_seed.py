@@ -30,7 +30,6 @@ def test_random_seed(sim_engine, fixture_random_seed):
         'exec_randomSeed'         : fixture_random_seed,
         'exec_numSlotframesPerRun': 100
     }
-
     log_file_hashes = []
 
     # compare logs out of 10 runs
@@ -42,11 +41,10 @@ def test_random_seed(sim_engine, fixture_random_seed):
         if fixture_random_seed == 'range':
             # ues i for 'exec_randomSeed':
             diff_config['exec_randomSeed'] = i
-
         engine   = sim_engine(diff_config=diff_config)
-        log      = SimLog.SimLog()
         settings = SimSettings.SimSettings()
-
+        log      = SimLog.SimLog()
+        
         # run the simulator
         u.run_until_end(engine)
 

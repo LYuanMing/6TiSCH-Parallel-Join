@@ -3,6 +3,7 @@ from builtins import range
 import pytest
 
 from SimEngine import SimLog
+from SimEngine.SimEngineDefines import SECOND
 from . import test_utils as u
 import SimEngine.Mote.MoteDefines as d
 
@@ -186,7 +187,7 @@ def test_vanilla_scenario(
             'secjoin_enabled':                             fixture_secjoin_enabled,
             'app_pkLength' :                               fixture_app_pkLength,
             'app_pkPeriod':                                0, # disable, will be send by test
-            'rpl_daoPeriod':                               60,
+            'rpl_daoPeriod':                               60 * SECOND,
             'tsch_probBcast_ebProb'   :                    0.33,
             'fragmentation':                               fixture_fragmentation,
             'fragmentation_ff_discard_vrb_entry_policy':   fragmentation_ff_discard_vrb_entry_policy,
@@ -237,7 +238,9 @@ def test_vanilla_scenario(
     datamote = sim_engine.motes[-1] # pick furthest mote
 
     # get the DAG root
-    dagroot  = sim_engine.motes[sim_engine.DAGROOT_ID]
+    dagroot  = sim_engine.motes[
+        sim_engine._get_network(sim_engine.default_network_id).root_mote_id
+        ]
 
     # verify no packets yet received by root
     assert len(u.read_log_file([SimLog.LOG_APP_RX['type']])) == 0

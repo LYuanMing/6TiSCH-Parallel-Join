@@ -7,6 +7,9 @@ from __future__ import absolute_import
 from builtins import str
 from builtins import range
 import random
+import sys
+import threading
+import traceback
 
 import pytest
 
@@ -152,6 +155,7 @@ def test_tx_with_two_slotframes(sim_engine):
     )
 
     u.run_until_everyone_joined(sim_engine)
+
     assert sim_engine.getAsn() < asn_at_end_of_simulation
 
     # put DIO to hop1
@@ -191,31 +195,32 @@ def test_tx_with_two_slotframes(sim_engine):
 
     # run for one slotframe
     asn = sim_engine.getAsn()
+    start_point = sim_engine.global_time
     assert (asn % 101) == 100 # the next slot is slotoffset 0
-    u.run_until_asn(sim_engine, asn + 101)
+    u.run_until_asn(sim_engine, asn + 100)
 
     # check logs
     ## TX side (hop_1)
     logs = [
         log for log in u.read_log_file(
                 filter    = [SimLog.LOG_TSCH_TXDONE['type']],
-                after_asn = asn
+                after_global_time = start_point 
             ) if log['_mote_id'] == hop_1.id
     ]
     assert len(logs) == 2
-    assert (logs[0]['_asn'] % 101) == cell_in_slotframe_0.slot_offset
-    assert (logs[1]['_asn'] % 101) == cell_in_slotframe_1.slot_offset
+    assert (sim_engine.global_time_to_asn(logs[0]['_global_time'], sim_engine.default_network_id) % 101) == cell_in_slotframe_0.slot_offset
+    assert (sim_engine.global_time_to_asn(logs[1]['_global_time'], sim_engine.default_network_id) % 101) == cell_in_slotframe_1.slot_offset
 
     ## RX side (root)
     logs = [
         log for log in u.read_log_file(
                 filter    = [SimLog.LOG_TSCH_RXDONE['type']],
-                after_asn = asn
+                after_global_time = start_point
             ) if log['_mote_id'] == root.id
     ]
     assert len(logs) == 2
-    assert (logs[0]['_asn'] % 101) == cell_in_slotframe_0.slot_offset
-    assert (logs[1]['_asn'] % 101) == cell_in_slotframe_1.slot_offset
+    assert (sim_engine.global_time_to_asn(logs[0]['_global_time'], sim_engine.default_network_id) % 101) == cell_in_slotframe_0.slot_offset
+    assert (sim_engine.global_time_to_asn(logs[1]['_global_time'], sim_engine.default_network_id) % 101) == cell_in_slotframe_1.slot_offset
 
     # confirm hop_1 has the minimal cell
     assert len(hop_1.tsch.get_cells(None)) == 1
@@ -240,7 +245,6 @@ def test_print_slotframe(sim_engine, fixture_num_cells):
         channel_offset = random.randint(0, 65535)
         slotframe.add(Cell(slot_offset, channel_offset, []))
 
-    print(slotframe)
     str_slotframe = str(slotframe)
     assert 'length: 101' in str_slotframe
     assert 'num_cells: {0}'.format(fixture_num_cells) in str_slotframe
@@ -270,7 +274,6 @@ def test_print_cell(sim_engine, fixture_cell_options, fixture_mac_addr):
 
     cell = Cell(slot_offset, channel_offset, fixture_cell_options, mac_addr)
 
-    print(cell)
     str_cell = str(cell)
     assert 'slot_offset: {0}'.format(slot_offset) in str_cell
     assert 'channel_offset: {0}'.format(channel_offset) in str_cell

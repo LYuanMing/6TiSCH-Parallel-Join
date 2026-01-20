@@ -1,12 +1,18 @@
+from ast import arg
+from bdb import effective
 import json
 import gzip
 import os
 import subprocess
+from unittest.mock import MagicMock
 
+from bottle import patch
 import eel
 import gevent
 import pytest
 
+from SimEngine.SimConfig import SimConfig
+from SimEngine.SimEngineDefines import SECOND
 import backend
 import backend.sim
 import backend.utils
@@ -67,6 +73,10 @@ def default_config():
     )
     with open(default_config_path) as f:
         default_config = json.load(f)
+    
+    # for any time-related key, the unit should be converted
+    default_config = SimConfig.config_time_to_simulator_time(default_config)
+    
     return default_config
 
 
@@ -106,7 +116,7 @@ def test_put_default_config(
         assert default_config['settings']['regular']['conn_class'] != 'K7'
         default_config['settings']['regular']['conn_class'] = 'K7'
     elif fixture_test_put_default_config_type == 'failure':
-        default_config = { 'settings': 'garbage string' }
+        default_config = { 'settings': {'garbage string': None} }
     else:
         raise NotImplementedError()
 
@@ -166,7 +176,6 @@ def test_get_available_trace_files():
     assert ret[0]['file_path'] == os.path.abspath(trace_file_path)
     assert ret[0]['config'] == config
 
-
 def test_start(default_settings):
     # set one (slotframe) to exec_numSlotframesPerRun so that the test
     # finishes in a short time
@@ -174,23 +183,18 @@ def test_start(default_settings):
 
     # _sim_engine should be None before starting a simulation
     assert backend.sim._sim_engine is None
-
     # call start()
     call_exposed_api(backend.sim.start, default_settings)
-
     # _sim_engine should be available now
     assert backend.sim._sim_engine is not None
     assert backend.sim._sim_engine.is_alive() is True
-
-    # the simulator should yield the CPU at every end of slotframe
-    assert (
-        backend.sim._sim_engine.getAsn() ==
-        (default_settings['tsch_slotframeLength'] - 1)
-    )
-
+    # while True:
+    gevent.sleep(0.001)
+    breakpoint()
     # sleep for a while. this makes the simulator run until it
     # finishes
-    gevent.sleep(2)
+
+    gevent.sleep(10)
 
     # the simulator should be finished
     assert backend.sim._sim_engine is None

@@ -5,6 +5,8 @@ import json
 
 import pytest
 
+from SimEngine.SimEngineDefines import SECOND
+
 from . import test_utils as u
 from SimEngine.SimConfig import SimConfig
 from SimEngine.SimLog import SimLog
@@ -39,7 +41,7 @@ def test_generate_config(sim_engine):
         ]
     }
     del expected_config['settings']['regular']['exec_numMotes']
-
+    expected_config['settings']['regular']['tsch_slotDuration']
     # adjust 'post' field
     expected_config['post'] = []
 
@@ -80,7 +82,7 @@ def test_exec_minutes_per_run(
     diff_config = {
         'exec_numSlotframesPerRun': exec_num_slotframes_per_run,
         'exec_minutesPerRun'      : exec_minutes_per_run,
-        'tsch_slotDuration'       : 0.01,
+        'tsch_slotDuration'       : 0.01 * SECOND,
         'tsch_slotframeLength'    : 100,
         'exec_numMotes'           : 1
     }
@@ -107,6 +109,6 @@ def test_exec_minutes_per_run(
         else:
             assert exec_minutes_per_run
             end_asn = (
-                old_div(exec_minutes_per_run * 60, diff_config['tsch_slotDuration'])
+                old_div(exec_minutes_per_run * 60 * SECOND, diff_config['tsch_slotDuration'])
             )
         assert sim_engine.getAsn() == end_asn

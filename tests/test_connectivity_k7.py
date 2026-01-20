@@ -9,6 +9,8 @@ import os
 
 import pytest
 
+from SimEngine.SimEngineDefines import SECOND
+
 from . import test_utils as u
 import SimEngine.Mote.MoteDefines as d
 from SimEngine import SimLog
@@ -50,7 +52,7 @@ def get_trace_duration():
         header['stop_date'],
         "%Y-%m-%dT%H:%M:%S.%f"
     )
-    return (stop_time - start_time).total_seconds()
+    return (stop_time - start_time).total_seconds() * SECOND
 
 def test_free_run(sim_engine):
     """ verify the connectivity matrix for the 'K7' class is as expected """
@@ -90,7 +92,7 @@ def fixture_test_type(request):
     return request.param
 
 def test_simulation_time(sim_engine, fixture_test_type):
-    tsch_slotDuration = 0.010
+    tsch_slotDuration = 0.010 * SECOND
     numSlotframes = old_div(get_trace_duration(), tsch_slotDuration)
     num_motes = get_num_motes()
 

@@ -2,7 +2,10 @@
 """
 import json
 import os
+import sys
+import threading
 import time
+import traceback
 import types
 
 import SimEngine
@@ -17,9 +20,8 @@ def run_until_asn(sim_engine, target_asn):
     """
     (re)start the simulator, run until some ASN, pause
     """
-
     # arm a pause at the target ASN
-    sim_engine.pauseAtAsn(target_asn)
+    sim_engine.pauseAt(sim_engine.asn_to_global_time(target_asn,sim_engine.default_network_id))
 
     if sim_engine.is_alive():
         # resume
@@ -39,7 +41,7 @@ def run_until_asn(sim_engine, target_asn):
 
         # ensure the simulation hasn't finished
         assert sim_engine.is_alive()
-
+        
     # flush the internal log buffer so that test code can see data in the log
     # files.
     SimEngine.SimLog.SimLog().flush()
@@ -51,6 +53,7 @@ def run_until_end(sim_engine):
     slotframe_length = sim_engine.settings.tsch_slotframeLength
     num_slotframes   = sim_engine.settings.exec_numSlotframesPerRun
     asn_at_end       = slotframe_length * num_slotframes
+
     run_until_asn(sim_engine, asn_at_end)
 
 def run_until_everyone_joined(sim_engine):
@@ -72,7 +75,7 @@ def run_until_everyone_joined(sim_engine):
 
         # stop the simulator if it's time to do
         if len(joined_node_set) == len(sim_engine.motes):
-            sim_engine.pauseAtAsn(sim_engine.getAsn() + 1)
+            sim_engine.pauseAt(sim_engine.global_time + sim_engine.settings.tsch_slotDuration)
 
     # install new_setIsJoined to the motes
     for mote in sim_engine.motes:
@@ -95,7 +98,7 @@ def run_until_mote_is_ready_for_app(sim_engine, mote):
                 self.mote.secjoin.getIsJoined()
             ):
             mote.rpl.original_action_receive_dio(packet)
-            sim_engine.pauseAtAsn(sim_engine.getAsn() + 1)
+            sim_engine.pauseAt(sim_engine.global_time + sim_engine.settings.tsch_slotDuration)
             mote.rpl.action_receiveDIO = mote.rpl.original_action_receive_dio
         else:
             # it's not ready; do nothing
@@ -104,7 +107,7 @@ def run_until_mote_is_ready_for_app(sim_engine, mote):
 
     run_until_end(sim_engine)
 
-def read_log_file(filter=[], after_asn=0):
+def read_log_file(filter=[], after_global_time=0):
     """return contents in a log file as a list of log objects
 
     You can get only logs which match types specified in "filter"
@@ -121,7 +124,7 @@ def read_log_file(filter=[], after_asn=0):
         f.readline()
         for line in f:
             log = json.loads(line)
-            if (log["_asn"] >= after_asn) and ((len(filter) == 0) or (log['_type'] in filter)):
+            if (log["_global_time"] >= after_global_time) and ((len(filter) == 0) or (log['_type'] in filter)):
                 logs.append(log)
 
     return logs
@@ -149,3 +152,17 @@ def get_join(parent, mote):
     mote.tsch._action_receiveEB(eb_dummy)
     dio = create_dio(parent)
     mote.rpl.action_receiveDIO(dio)
+
+def dump_deadlock():
+    
+    def dump_threads():
+        print("\n=== THREAD DUMP ===")
+        for tid, frame in sys._current_frames().items():
+            print(f"\nThread ID: {tid}")
+            traceback.print_stack(frame)
+        print("=== END THREAD DUMP ===")
+
+    # 用 timer 在 5 秒后自动 dump
+    timer = threading.Timer(5.0, dump_threads)
+    timer.start()
+

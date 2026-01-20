@@ -12,6 +12,8 @@ import types
 
 import pytest
 
+from SimEngine.SimEngineDefines import SECOND
+
 from . import test_utils as u
 import SimEngine.Mote.MoteDefines as d
 import SimEngine.Mote.rpl as rpl
@@ -209,7 +211,6 @@ class TestOF0(object):
         assert motes[0].rpl.get_rank()   == 256
         assert motes[0].rpl.getDagRank() == 1
 
-        print(motes[1].rpl.of.preferred_parent)
         assert motes[1].rpl.get_rank()   == 768
         assert motes[1].rpl.getDagRank() == 3
 
@@ -419,9 +420,6 @@ def test_dis_config(sim_engine, fixture_dis_mode):
     mote.tsch._action_receiveEB(eb)
     mote.tsch._action_receiveEB(eb_dummy)
 
-    # stop the trickle timer for this test
-    root.rpl.trickle_timer.stop()
-
     # prepare sendPacket() for this test
     result = {'dis': None, 'dio': None}
     def sendPacket(self, packet):
@@ -446,6 +444,11 @@ def test_dis_config(sim_engine, fixture_dis_mode):
     root.sixlowpan.original_sendPacket = root.sixlowpan.sendPacket
     root.sixlowpan.sendPacket = types.MethodType(sendPacket, root.sixlowpan)
     mote.rpl.start()
+    # stop the trickle timer for this test
+    # set an empty callback because mote's rpl.trickle_timer would be restart when join
+    root.rpl.trickle_timer.stop()
+    root.rpl.trickle_timer.set_callback(lambda *args, **kwargs: None) 
+    mote.rpl.trickle_timer.set_callback(lambda *args, **kwargs: None)
 
     # run the simulation for a while
     u.run_until_asn(sim_engine, 1000)
@@ -469,7 +472,8 @@ def test_dis_timer(sim_engine):
             'secjoin_enabled'         : False,
             'app_pkPeriod'            : 0,
             'tsch_keep_alive_interval': 0,
-            'exec_numSlotframesPerRun': rpl.Rpl.DEFAULT_DIS_INTERVAL_SECONDS + 1
+            'exec_minutesPerRun': rpl.Rpl.DEFAULT_DIS_INTERVAL_SECONDS / (SECOND * 60),
+            'exec_numSlotframesPerRun': None
         }
     )
 
@@ -600,7 +604,7 @@ def test_dodag_parent(sim_engine, fixture_rank_value):
         # the child should send a DIO having INFINITE_RANK
         logs = u.read_log_file(
             filter    = [SimLog.LOG_RPL_DIO_TX['type']],
-            after_asn = sim_engine.getAsn() - 1
+            after_global_time = sim_engine.global_time - sim_engine.settings.tsch_slotDuration
         )
         assert len(logs) == 1
         assert logs[0]['packet']['app']['rank'] == 65535

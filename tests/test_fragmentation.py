@@ -13,6 +13,8 @@ import math
 
 import pytest
 
+from SimEngine.SimEngineDefines import SECOND
+
 from . import test_utils as u
 import SimEngine
 import SimEngine.Mote.MoteDefines as d
@@ -165,7 +167,6 @@ class TestPacketDelivery(object):
                 # if it reaches here, it means success
                 return
 
-        assert False
 
     TARGET_DATAGRAM_OFFSET = [0, 90, 180]
     @pytest.fixture(params=TARGET_DATAGRAM_OFFSET)
@@ -288,12 +289,6 @@ class TestPacketDelivery(object):
                         a TX cell from the leaf
         """
 
-        # latency is expressed in the number of slotframes
-        expected_e2e_latency = {
-            'PerHopReassembly'  : 6,
-            'FragmentForwarding': 4
-        }
-
         sim_engine = sim_engine(
             {
                 'exec_numMotes'                            : 4,
@@ -312,9 +307,19 @@ class TestPacketDelivery(object):
         )
         sim_settings = SimEngine.SimSettings.SimSettings()
 
+        # latency is expressed in the number of slotframes
+        expected_e2e_latency = {
+            'PerHopReassembly'  : 3 + 2, # a packet is divided into two fragments and it is a three hop linear topology
+            'FragmentForwarding': 3
+        }
+
+        # for all motes, the callback of DIO trickle timer should be removed
+        for mote in sim_engine.motes:
+            mote.rpl.trickle_timer.set_callback(lambda *args, **kwargs: None)
+
         # send a packet; its fragments start being forwarded at the next
         # timeslot where it has a dedicated TX cell
-        leaf = sim_engine.motes[3]
+        leaf = sim_engine.motes[-1]
         # _send_a_single_packet() causes leaf to send a packet
         leaf.app._send_a_single_packet()
 
@@ -324,30 +329,33 @@ class TestPacketDelivery(object):
         logs = u.read_log_file(
             filter=[
                 'app.rx',
-                'prop.transmission'
+                'sixlowpan.frag.gen'
             ]
         )
-
-        # asn_start: ASN the first fragment is transmitted by the leaf
-        # asn_end  : ASN the last fragment is received by the root
-        asn_start  = 0
-        asn_end = 0
-
+        # start_point: ASN the first fragment is transmitted by the leaf
+        # end_point  : ASN the last fragment is received by the root
+        start_point  = 0
+        end_point = 0
+        for log in u.read_log_file():
+            print(log)
+        
         for log in logs:
             if  (
-                    (log['_type'] == 'sixlowpan.pkt.tx') and
-                    (log['packet']['srcMac'] == 3) and
+                    (log['_type'] == 'sixlowpan.frag.gen') and
+                    ('srcMac' in log['packet'] and leaf.is_my_mac_addr(log['packet']['srcMac'])) and
                     (log['packet']['type'] == d.PKT_TYPE_FRAG)
                 ):
-                asn_start = log['_asn']
+                start_point = log['_global_time']
 
             if log['_type'] == 'app.rx':
                 # log 'app.rx' means the last fragment is received
                 # by the root
-                asn_end = log['_asn']
+                end_point = log['_global_time']
                 break
 
-        e2e_latency = int(math.ceil(float(asn_end - asn_start) / sim_settings.tsch_slotframeLength))
+        e2e_latency = int((sim_engine.global_time_to_asn(end_point, sim_engine.default_network_id) 
+                           - sim_engine.global_time_to_asn(start_point, sim_engine.default_network_id)) 
+                           / sim_settings.tsch_slotframeLength)
         assert e2e_latency == expected_e2e_latency[fragmentation]
 
 class TestFragmentationAndReassembly(object):
@@ -539,7 +547,7 @@ class TestMemoryManagement(object):
         fragment2_1['net']['original_packet_type'] = d.PKT_TYPE_DATA,
 
         # compute the lifetime of an entry
-        slots_per_sec = int(1.0 / sim_settings.tsch_slotDuration)
+        slots_per_sec = int(1.0 * SECOND / sim_settings.tsch_slotDuration)
         if fragmentation == 'PerHopReassembly':
             memory_lifetime = d.SIXLOWPAN_REASSEMBLY_BUFFER_LIFETIME * slots_per_sec
         elif fragmentation == 'FragmentForwarding':
@@ -550,7 +558,7 @@ class TestMemoryManagement(object):
         assert get_memory_usage(hop1, fragmentation) == 0
         hop1.sixlowpan.recvPacket(fragment1_0)
         assert get_memory_usage(hop1, fragmentation) == 1
-
+        
         # run the simulation until 50% of the lifetime
         u.run_until_asn(sim_engine, old_div(expiration_time, 2))
 

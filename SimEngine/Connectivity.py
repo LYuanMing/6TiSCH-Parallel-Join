@@ -32,6 +32,8 @@ import datetime as dt
 import json
 import itertools
 
+from SimEngine.SimEngineDefines import SECOND
+
 from . import SimSettings
 from . import SimLog
 from .Mote.Mote import Mote
@@ -683,12 +685,12 @@ class ConnectivityMatrixK7(ConnectivityMatrixBase):
                 )
 
             numSlotframes = (
-                old_div((stop_date - self.start_date).total_seconds(),
+                old_div((stop_date - self.start_date).total_seconds() * SECOND,
                 self.settings.tsch_slotDuration)
             )
+
             if self.settings.exec_numSlotframesPerRun > numSlotframes:
                 raise ValueError(u'exec_numSlotframesPerRun is too long')
-
             initialization_is_done = False
             initialized_links = set([])
 
@@ -730,7 +732,7 @@ class ConnectivityMatrixK7(ConnectivityMatrixBase):
 
             # return next update ASN
 
-            if row[u'asn'] > self.engine.asn:
+            if row[u'asn'] > self.engine.getAsn():
                 asn_of_next_update = row[u'asn']
                 break
 

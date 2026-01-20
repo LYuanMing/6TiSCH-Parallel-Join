@@ -9,6 +9,8 @@ from __future__ import absolute_import
 
 # Mote sub-modules
 from builtins import object
+
+from SimEngine.SimEngineDefines import SECOND
 from . import MoteDefines as d
 
 # Simulator-wide modules
@@ -30,7 +32,8 @@ class Radio(object):
         self.mote                           = mote
 
         # singletons (quicker access, instead of recreating every time)
-        self.engine                         = SimEngine.SimEngine.SimEngine()
+        # self.engine                         = SimEngine.SimEngine.SimEngine()
+        self.engine                         = SimEngine.MultiNetworkEngine.MultiNetworkSimEngineInstance()
         self.settings                       = SimEngine.SimSettings.SimSettings()
         self.log                            = SimEngine.SimLog.SimLog().log
 
@@ -51,7 +54,7 @@ class Radio(object):
             u'sleep'         : 0,
         }
         self.log_stats_interval_asn = int(
-            float(self.settings.radio_stats_log_period_s) /
+            float(self.settings.radio_stats_log_period_s * SECOND) /
             self.settings.tsch_slotDuration
         )
         if self.log_stats_interval_asn > 0:

@@ -265,7 +265,6 @@ class TestMSF(object):
         )
 
         # 2.6 confirm the cell usage reaches 100%
-        print(sim_engine.getAsn())
         assert mote.sf.tx_cell_utilization == 1.0
 
         # 2.7 one negotiated TX cell should be allocated in the next 2 slotframes
@@ -323,7 +322,7 @@ class TestMSF(object):
             cell.num_tx_ack = 0
 
         # 3.3 run for the next 20 slotframes
-        asn_start = sim_engine.getAsn()
+        start_point = sim_engine.global_time
         u.run_until_asn(
             sim_engine,
             sim_engine.getAsn() + mote.settings.tsch_slotframeLength * 20
@@ -331,7 +330,7 @@ class TestMSF(object):
 
         # 3.5 RELOCATE should have happened
         logs = [
-            log for log in u.read_log_file(filter=['sixp.comp'], after_asn=asn_start)
+            log for log in u.read_log_file(filter=['sixp.comp'], after_global_time=start_point)
             if (
                 (log['_mote_id'] == mote.id)
                 and
@@ -345,7 +344,7 @@ class TestMSF(object):
         mote.settings.app_pkPeriod = 0
 
         # 4.2 run for a while
-        asn_start = sim_engine.getAsn()
+        start_point = sim_engine.global_time
         u.run_until_asn(
             sim_engine,
             sim_engine.getAsn() + mote.settings.tsch_slotframeLength * 20
@@ -353,7 +352,7 @@ class TestMSF(object):
 
         # 4.3 DELETE should have happened
         logs = [
-            log for log in u.read_log_file(filter=['sixp.comp'], after_asn=asn_start)
+            log for log in u.read_log_file(filter=['sixp.comp'], after_global_time=start_point)
             if (
                 (log['_mote_id'] == mote.id)
                 and
@@ -410,11 +409,11 @@ class TestMSF(object):
 
         # mote_1 should issue CLEAR to the old preferred parent and ADD to the
         # new one
-        asn_start_testing = sim_engine.getAsn()
+        start_point = sim_engine.global_time
         u.run_until_end(sim_engine)
         logs = u.read_log_file(
             filter    = [SimLog.LOG_SIXP_TX['type']],
-            after_asn = asn_start_testing
+            after_global_time = start_point
         )
 
         def it_is_clear_request(packet):
@@ -508,7 +507,7 @@ class TestMSF(object):
         # MSF should output a "schedule-full" error in the log file
         logs = u.read_log_file(
             filter    = [SimLog.LOG_MSF_ERROR_SCHEDULE_FULL['type']],
-            after_asn = sim_engine.getAsn() - 1
+            after_global_time = sim_engine.global_time - sim_engine.settings.tsch_slotDuration
         )
         assert len(logs) == 1
         assert logs[0]['_mote_id'] == hop_1.id
@@ -700,7 +699,7 @@ class TestMSF(object):
             sim_engine,
             4 * sim_engine.settings.tsch_slotframeLength
         )
-        test_start_asn = sim_engine.getAsn()
+        start_point = sim_engine.global_time
 
         # mote should have one negotiated TX cell
         cells = mote.tsch.get_cells(
@@ -742,7 +741,7 @@ class TestMSF(object):
         )
         logs = u.read_log_file(
             filter    = [SimLog.LOG_SIXP_TX['type']],
-            after_asn = test_start_asn
+            after_global_time = start_point
         )
         logs = [log for log in logs if log['_mote_id'] == 1]
         assert len(logs) == 1

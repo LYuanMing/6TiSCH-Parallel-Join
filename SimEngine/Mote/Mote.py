@@ -46,7 +46,8 @@ class Mote(object):
 
         # singletons (quicker access, instead of recreating every time)
         self.log                       = SimEngine.SimLog.SimLog().log
-        self.engine                    = SimEngine.SimEngine.SimEngine()
+        # self.engine                    = SimEngine.SimEngine.SimEngine()
+        self.engine                    = SimEngine.MultiNetworkEngine.MultiNetworkSimEngineInstance()
         self.settings                  = SimEngine.SimSettings.SimSettings()
 
         # stack state

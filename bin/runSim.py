@@ -32,7 +32,7 @@ import glob
 import shutil
 
 from SimEngine import SimConfig,   \
-                      SimEngine,   \
+                      MultiNetworkEngine,   \
                       SimLog, \
                       SimSettings, \
                       Connectivity
@@ -117,8 +117,8 @@ def runSimCombinations(params):
             settings.setCombinationKeys(combinationKeys)
             simlog           = SimLog.SimLog()
             simlog.set_log_filters(simconfig.logging)
-            simengine        = SimEngine.SimEngine(run_id=run_id, verbose=verbose)
-
+            simengine        = MultiNetworkEngine.MultiNetworkSimEngineInstance(run_id=run_id, verbose=verbose)
+            simengine._init_additional_local_variables()
 
             # start simulation run
             simengine.start()
@@ -221,7 +221,7 @@ def main():
             'pid':                os.getpid(),
             'numRuns':            simconfig.execution.numRuns,
             'first_run':          0,
-            'verbose':            True,
+            'verbose':            False,
             'config_data':        simconfig.get_config_data()
         })
 

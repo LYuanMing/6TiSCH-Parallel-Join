@@ -26,6 +26,8 @@ import platform
 import sys
 import time
 
+from SimEngine.SimEngineDefines import SECOND
+
 from . import SimSettings
 
 # =========================== defines =========================================
@@ -54,6 +56,7 @@ class SimConfig(dict):
     # class variables, which are shared among all the instances
     _startTime          = None
     _log_directory_name = None
+    _time_related_key = ["app_pkPeriod", "rpl_daoPeriod", "tsch_slotDuration", "tsch_keep_alive_interval", "radio_stats_log_period_s"]
 
     def __init__(self, configfile=None, configdata=None):
 
@@ -79,7 +82,8 @@ class SimConfig(dict):
 
         # store config
         self.config   = DotableDict(json.loads(self._raw_data))
-
+        # for time-related config, we should convert them to simulator time
+        self.config_time_to_simulator_time(self.config)
         # decide a directory name for log files
         if SimConfig._log_directory_name is None:
             self._decide_log_directory_name()
@@ -93,6 +97,32 @@ class SimConfig(dict):
     def get_log_directory_name(self):
         return SimConfig._log_directory_name
 
+    @classmethod
+    def config_time_to_simulator_time(cls, config: dict):
+        
+        if config is None or config.get("settings", None) is None or config['settings'].get("regular", None) is None:
+            return config
+
+        for k in cls._time_related_key:
+            if config['settings']['regular'].get(k, None):
+                config["settings"]["regular"][k] *= SECOND
+        return config
+
+    @classmethod
+    def simulator_time_to_config_time(cls, config):
+        
+        if config is None or config.get("settings", None) is None or config['settings'].get("regular", None) is None:
+            return config
+
+        for k in cls._time_related_key:
+            if config['settings']['regular'].get(k, None):
+                config["settings"]["regular"][k] /= SECOND
+
+                if config['settings']['regular'][k] == int(config['settings']['regular'][k]):
+                    config['settings']['regular'][k] = int(config['settings']['regular'][k])
+
+        return config
+    
     @classmethod
     def get_startTime(cls):
         return cls._startTime
@@ -114,13 +144,14 @@ class SimConfig(dict):
         # regular_field
         exec_numMote = regular_field[u'exec_numMotes']
         del regular_field[u'exec_numMotes']
-
         config_json = {
             'settings': {
                 'combination': {'exec_numMotes': [exec_numMote]},
                 'regular': regular_field
             }
         }
+        SimConfig.simulator_time_to_config_time(config_json)
+
         config_json[u'version'] = 0
         config_json[u'post'] = []
         config_json[u'log_directory_name'] = u'startTime'

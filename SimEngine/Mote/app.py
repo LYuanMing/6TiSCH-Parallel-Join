@@ -46,7 +46,8 @@ class AppBase(object):
         self.mote       = mote
 
         # singletons (quicker access, instead of recreating every time)
-        self.engine     = SimEngine.SimEngine.SimEngine()
+        # self.engine     = SimEngine.SimEngine.SimEngine()
+        self.engine     = SimEngine.MultiNetworkEngine.MultiNetworkSimEngineInstance()
         self.settings   = SimEngine.SimSettings.SimSettings()
         self.log        = SimEngine.SimLog.SimLog().log
 

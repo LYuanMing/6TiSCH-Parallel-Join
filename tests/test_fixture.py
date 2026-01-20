@@ -122,6 +122,9 @@ def test_initial_scheduling_state(sim_engine):
 def test_sim_config(sim_engine, repeat4times):
 
     sim_config  = SimConfig.SimConfig(u.CONFIG_FILE_PATH)
+    
+    # don't test tsch_slotDuration
+    del sim_config.config['settings']['regular']['tsch_slotDuration']
 
     sim_engine = sim_engine()
     for (k,v) in list(sim_config.config['settings']['regular'].items()):

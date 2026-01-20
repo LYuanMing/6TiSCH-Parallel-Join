@@ -78,4 +78,3 @@ For vscode, you can also configure the Run And Debug in launch.json with followi
 
 In VScode, you may find that there are some breaks while running pytest in some tests. The exception is raised by *sys.exit(1)* in *print_error_and_exit*. Don't worry, just continue the tests, it is the normal cases.
 
-

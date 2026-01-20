@@ -182,10 +182,10 @@ def test_compute_battery_lifetime(sim_engine):
     assert len(logs) == 2
 
     logs[0]['_type'] == 'radio.status'
-    logs[0]['_asn'] == 0
+    logs[0]['_global_time'] == 0
 
     logs[1]['_type'] == 'tsch.synced'
-    logs[1]['_asn'] == 101
+    logs[1]['_global_time'] == 101 * sim_engine.settings.tsch_slotDuration
 
     # run compute_kpis, which should end without raising an exception
     output = run_compute_kpis_py()

@@ -16,6 +16,8 @@ import random
 
 import netaddr
 
+from SimEngine.SimEngineDefines import SECOND
+
 # Mote sub-modules
 from . import MoteDefines as d
 from SimEngine.Mote.sf import SchedulingFunctionMSF
@@ -37,7 +39,8 @@ class Tsch(object):
         self.mote = mote
 
         # singletons (quicker access, instead of recreating every time)
-        self.engine   = SimEngine.SimEngine.SimEngine()
+        # self.engine   = SimEngine.SimEngine.SimEngine()
+        self.engine   = SimEngine.MultiNetworkEngine.MultiNetworkSimEngineInstance()
         self.settings = SimEngine.SimSettings.SimSettings()
         self.log      = SimEngine.SimLog.SimLog().log
 
@@ -999,7 +1002,6 @@ class Tsch(object):
             # we don't have any cell; return without scheduling the next active
             # slot
             return
-
         # schedule at that ASN
         self.engine.scheduleAtAsn(
             asn            = asn+tsDiffMin,
@@ -1191,7 +1193,7 @@ class Tsch(object):
                 # start the timer to wait for other EBs if this is the
                 # first received EB
                 self.engine.scheduleIn(
-                    delay          = d.TSCH_MAX_EB_DELAY,
+                    delay          = d.TSCH_MAX_EB_DELAY * SECOND,
                     cb             = self._perform_synchronization,
                     uniqueTag      = event_tag,
                     intraSlotOrder = d.INTRASLOTORDER_STACKTASKS
@@ -1484,7 +1486,8 @@ class Tsch(object):
 class Clock(object):
     def __init__(self, mote):
         # singleton
-        self.engine   = SimEngine.SimEngine.SimEngine()
+        # self.engine   = SimEngine.SimEngine.SimEngine()
+        self.engine               = SimEngine.MultiNetworkEngine.MultiNetworkSimEngineInstance()
         self.settings = SimEngine.SimSettings.SimSettings()
 
         # local variables
@@ -1501,7 +1504,8 @@ class Clock(object):
 
     @staticmethod
     def get_clock_by_mac_addr(mac_addr):
-        engine = SimEngine.SimEngine.SimEngine()
+        # engine = SimEngine.SimEngine.SimEngine()
+        engine               = SimEngine.MultiNetworkEngine.MultiNetworkSimEngineInstance()
         mote = engine.get_mote_by_mac_addr(mac_addr)
         return mote.tsch.clock
 

@@ -8,6 +8,7 @@ import sys
 
 import netaddr
 
+
 if __name__ == '__main__':
     here = sys.path[0]
     sys.path.insert(0, os.path.join(here, '..'))
@@ -20,6 +21,7 @@ import numpy as np
 
 from SimEngine import SimLog
 import SimEngine.Mote.MoteDefines as d
+from SimEngine.SimEngineDefines import SECOND
 
 # =========================== defines =========================================
 
@@ -45,11 +47,9 @@ def init_mote():
         'upstream_num_tx': 0,
         'upstream_num_rx': 0,
         'upstream_num_lost': 0,
-        'join_asn': None,
         'join_time_s': None,
-        'sync_asn': None,
         'sync_time_s': None,
-        'charge_asn': None,
+        'charge_time_s': None,
         'upstream_pkts': {},
         'latencies': [],
         'hops': [],
@@ -74,8 +74,8 @@ def kpis_all(inputfile):
 
         # shorthands
         run_id = logline['_run_id']
-        if '_asn' in logline: # TODO this should be enforced in each line
-            asn = logline['_asn']
+        if '_global_time' in logline: # TODO this should be enforced in each line
+            global_time = logline['_global_time']
         if '_mote_id' in logline: # TODO this should be enforced in each line
             mote_id = logline['_mote_id']
 
@@ -101,8 +101,7 @@ def kpis_all(inputfile):
             if mote_id == DAGROOT_ID:
                 continue
 
-            allstats[run_id][mote_id]['sync_asn']  = asn
-            allstats[run_id][mote_id]['sync_time_s'] = asn*file_settings['tsch_slotDuration']
+            allstats[run_id][mote_id]['sync_time_s'] = global_time / SECOND
 
         elif logline['_type'] == SimLog.LOG_SECJOIN_JOINED['type']:
             # joined
@@ -115,9 +114,8 @@ def kpis_all(inputfile):
                 continue
 
             # populate
-            assert allstats[run_id][mote_id]['sync_asn'] is not None
-            allstats[run_id][mote_id]['join_asn']  = asn
-            allstats[run_id][mote_id]['join_time_s'] = asn*file_settings['tsch_slotDuration']
+            assert allstats[run_id][mote_id]['sync_time_s'] is not None
+            allstats[run_id][mote_id]['join_time_s'] = global_time / SECOND
 
         elif logline['_type'] == SimLog.LOG_APP_TX['type']:
             # packet transmission
@@ -132,13 +130,13 @@ def kpis_all(inputfile):
                 continue
 
             # populate
-            assert allstats[run_id][mote_id]['join_asn'] is not None
+            assert allstats[run_id][mote_id]['join_time_s'] is not None
             if appcounter not in allstats[run_id][mote_id]['upstream_pkts']:
                 allstats[run_id][mote_id]['upstream_pkts'][appcounter] = {
                     'hops': 0,
                 }
 
-            allstats[run_id][mote_id]['upstream_pkts'][appcounter]['tx_asn'] = asn
+            allstats[run_id][mote_id]['upstream_pkts'][appcounter]['tx_time_s'] = global_time / SECOND
 
         elif logline['_type'] == SimLog.LOG_APP_RX['type']:
             # packet reception
@@ -156,7 +154,7 @@ def kpis_all(inputfile):
             allstats[run_id][mote_id]['upstream_pkts'][appcounter]['hops']   = (
                 d.IPV6_DEFAULT_HOP_LIMIT - hop_limit + 1
             )
-            allstats[run_id][mote_id]['upstream_pkts'][appcounter]['rx_asn'] = asn
+            allstats[run_id][mote_id]['upstream_pkts'][appcounter]['rx_time_s'] = global_time / SECOND
 
         elif logline['_type'] == SimLog.LOG_RADIO_STATS['type']:
             # shorthands
@@ -173,7 +171,7 @@ def kpis_all(inputfile):
             charge += logline['rx_data'] * d.CHARGE_RxData_uC
             charge += logline['sleep'] * d.CHARGE_Sleep_uC
 
-            allstats[run_id][mote_id]['charge_asn'] = asn
+            allstats[run_id][mote_id]['charge_time_s'] = global_time / SECOND
             allstats[run_id][mote_id]['charge']     = charge
 
     # === compute advanced motestats
@@ -182,25 +180,25 @@ def kpis_all(inputfile):
         for (mote_id, motestats) in list(per_mote_stats.items()):
             if mote_id != 0:
 
-                if (motestats['sync_asn'] is not None) and (motestats['charge_asn'] is not None):
+                if (motestats['sync_time_s'] is not None) and (motestats['charge_time_s'] is not None):
                     # avg_current, lifetime_AA
                     if (
                             (motestats['charge'] <= 0)
                             or
-                            (motestats['charge_asn'] <= motestats['sync_asn'])
+                            (motestats['charge_time_s'] <= motestats['sync_time_s'])
                         ):
                         motestats['lifetime_AA_years'] = 'N/A'
                     else:
-                        motestats['avg_current_uA'] = motestats['charge']/float((motestats['charge_asn']-motestats['sync_asn']) * file_settings['tsch_slotDuration'])
+                        motestats['avg_current_uA'] = motestats['charge']/float((motestats['charge_time_s']-motestats['sync_time_s']))
                         assert motestats['avg_current_uA'] > 0
                         motestats['lifetime_AA_years'] = (BATTERY_AA_CAPACITY_mAh*1000/float(motestats['avg_current_uA']))/(24.0*365)
-                if motestats['join_asn'] is not None:
+                if motestats['join_time_s'] is not None:
                     # latencies, upstream_num_tx, upstream_num_rx, upstream_num_lost
                     for (appcounter, pktstats) in list(allstats[run_id][mote_id]['upstream_pkts'].items()):
                         motestats['upstream_num_tx']      += 1
-                        if 'rx_asn' in pktstats:
+                        if 'rx_time_s' in pktstats:
                             motestats['upstream_num_rx']  += 1
-                            thislatency = (pktstats['rx_asn']-pktstats['tx_asn'])*file_settings['tsch_slotDuration']
+                            thislatency = (pktstats['rx_time_s']-pktstats['tx_time_s'])
                             motestats['latencies']  += [thislatency]
                             motestats['hops']       += [pktstats['hops']]
                         else:
@@ -240,8 +238,8 @@ def kpis_all(inputfile):
 
             # joining times
 
-            if motestats['join_asn'] is not None:
-                joining_times.append(motestats['join_asn'])
+            if motestats['join_time_s'] is not None:
+                joining_times.append(motestats['join_time_s'])
 
             # latency
 
@@ -389,15 +387,15 @@ def kpis_all(inputfile):
 
     for (run_id, per_mote_stats) in list(allstats.items()):
         for (mote_id, motestats) in list(per_mote_stats.items()):
-            if 'sync_asn' in motestats:
-                del motestats['sync_asn']
-            if 'charge_asn' in motestats:
-                del motestats['charge_asn']
+            if 'sync_time_s' in motestats:
+                del motestats['sync_time_s']
+            if 'charge_time_s' in motestats:
+                del motestats['charge_time_s']
                 del motestats['charge']
-            if 'join_asn' in motestats:
+            if 'join_time_s' in motestats:
                 del motestats['upstream_pkts']
                 del motestats['hops']
-                del motestats['join_asn']
+                del motestats['join_time_s']
 
     return allstats
 

@@ -116,6 +116,12 @@ class SimLog(object):
     def __new__(cls, *args, **kwargs):
         if not cls._instance:
             cls._instance = super(SimLog, cls).__new__(cls)
+            import sys
+            print("\n" + "="*40)
+            print("SINGLETON DETECTED INITIALIZATION AT:")
+            # 打印调用堆栈
+            traceback.print_stack(file=sys.stdout)
+            print("="*40 + "\n")
         return cls._instance
     # ==== end singleton
 
@@ -138,7 +144,6 @@ class SimLog(object):
 
             # local variables
             self.log_filters = []
-
             # open log file
             self.log_output_file = open(self.settings.getOutputFile(), u'a')
 
@@ -163,7 +168,6 @@ class SimLog(object):
         :param dict simlog:
         :param dict content:
         """
-
         # ignore types that are not listed in the simulation config
         if (self.log_filters != u'all') and (simlog[u'type'] not in self.log_filters):
             return
@@ -181,14 +185,14 @@ class SimLog(object):
         # if self.engine is not available, consider the current time
         # is ASN 0.
         if self.engine is None:
-            asn = 0
+            global_time = 0
         else:
-            asn = self.engine.asn
+            global_time = self.engine.global_time
 
         # update the log content
         content.update(
             {
-                "_asn":       asn,
+                "_global_time":       global_time,
                 "_type":      simlog["type"],
                 "_run_id":    self.settings.run_id
             }

@@ -5,6 +5,8 @@ import types
 
 import pytest
 
+from SimEngine.SimEngineDefines import SECOND
+
 from . import test_utils as u
 import SimEngine.Mote.MoteDefines as d
 from SimEngine.Mote.sf import SchedulingFunctionBase
@@ -320,7 +322,7 @@ class TestTransaction(object):
             dstMac          = responder.get_mac_addr(),
             command         = d.SIXP_CMD_ADD,
             cellList        = [],
-            timeout_seconds = 2
+            timeout_seconds = 2 * SECOND
         )
 
         # wait a little bit
@@ -365,7 +367,7 @@ class TestTransaction(object):
             command  = d.SIXP_CMD_COUNT,
             callback = request_callback
         )
-
+        
         # test timeout on the responder side
         result['is_response_callback_called'] = False
         def response_callback(event, packet):
@@ -424,7 +426,7 @@ class TestTransaction(object):
         # step-1: let hop_1 issue an ADD request. In order to make the
         # transaction expire on hop_1, set a shorter timeout value on hop_1's
         # side
-        timeout_seconds = 0.01
+        timeout_seconds = 0.01 * SECOND
         hop_1.sixp.send_request(
             dstMac          = root.get_mac_addr(),
             command         = d.SIXP_CMD_ADD,
@@ -511,6 +513,9 @@ class TestTransaction(object):
         install_sf(sim_engine.motes, SchedulingFunctionThreeStepForAbortion)
         root = sim_engine.motes[0]
         mote = sim_engine.motes[1]
+        empty_function = lambda *args, **kwargs: None
+        root.rpl.trickle_timer.set_callback(empty_function)
+        mote.rpl.trickle_timer.set_callback(empty_function)
 
         assert len(root.sixp.transaction_table) == 0
         assert len(root.tsch.txQueue) == 0
@@ -683,6 +688,6 @@ class TestSeqNum(object):
             dstMac          = peer.get_mac_addr(),
             command         = d.SIXP_CMD_ADD,
             cellList        = [],
-            timeout_seconds = 2
+            timeout_seconds = 2 * SECOND
         )
         u.run_until_end(sim_engine)

@@ -4,6 +4,8 @@ from builtins import zip
 from past.utils import old_div
 import pytest
 
+from SimEngine.SimEngineDefines import SECOND
+
 from . import test_utils as u
 import SimEngine.Mote.MoteDefines as d
 from SimEngine import SimLog
@@ -38,7 +40,7 @@ def test_tsch_clock(sim_engine, with_keep_alive):
     sim_log = SimLog.SimLog()
 
     # static values
-    macTsRxWait = 0.00222 # 2,220 usec defined for 2.4 GHz by IEEE 802.15.4-2015
+    macTsRxWait = 0.00222 * SECOND # 2,220 usec defined for 2.4 GHz by IEEE 802.15.4-2015
 
     # shorthands
     root             = sim_engine.motes[0]
@@ -47,7 +49,7 @@ def test_tsch_clock(sim_engine, with_keep_alive):
     slot_duration    = sim_engine.settings.tsch_slotDuration
     slotframe_length = sim_engine.settings.tsch_slotframeLength
     max_drift        = sim_engine.settings.tsch_clock_max_drift_ppm
-    clock_interval   = 1.0 / sim_engine.settings.tsch_clock_frequency
+    clock_interval   = SECOND / sim_engine.settings.tsch_clock_frequency
     guard_time       = (old_div(macTsRxWait, 2)) - (2 * clock_interval)
 
     def _check_and_log_clock_drift():
@@ -65,6 +67,7 @@ def test_tsch_clock(sim_engine, with_keep_alive):
         upper_bound_drift = (
             elapsed_time * (+1 * max_drift * 2) + clock_interval
         )
+        
         assert lower_bound_drift < diff_1
         assert diff_1 < upper_bound_drift
 
@@ -85,7 +88,7 @@ def test_tsch_clock(sim_engine, with_keep_alive):
 
     def _schedule_clock_drift_checking_and_logging():
         sim_engine.scheduleAtAsn(
-            asn            = sim_engine.getAsn() + (1.0 / slot_duration),
+            asn            = sim_engine.getAsn() + (SECOND / slot_duration),
             cb             = _check_and_log_clock_drift,
             uniqueTag      = 'check_and_log_clock_drift',
             intraSlotOrder = d.INTRASLOTORDER_ADMINTASKS

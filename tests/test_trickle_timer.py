@@ -2,6 +2,8 @@ from __future__ import absolute_import
 from builtins import range
 import pytest
 
+from SimEngine.SimEngineDefines import MILLISECOND
+
 from . import test_utils as u
 from SimEngine.Mote.trickle_timer import TrickleTimer
 
@@ -9,7 +11,7 @@ from SimEngine.Mote.trickle_timer import TrickleTimer
 DEFAULT_DIO_INTERVAL_MIN = 3
 DEFAULT_DIO_INTERVAL_DOUBLINGS = 20
 DEFAULT_DIO_REDUNDANCY_CONSTANT = 10
-Imin = pow(2, DEFAULT_DIO_INTERVAL_MIN) # msec
+Imin = pow(2, DEFAULT_DIO_INTERVAL_MIN) * MILLISECOND # msec
 Imax = DEFAULT_DIO_INTERVAL_DOUBLINGS
 K    = DEFAULT_DIO_REDUNDANCY_CONSTANT
 
@@ -47,7 +49,7 @@ def test_redundancy_constant(sim_engine, num_consistency):
 
     trickle_timer = TrickleTimer(Imin, Imax, K, _callback)
     # set one slotframe long to the interval (for test purpose)
-    INITIAL_INTERVAL = 1010 # ms
+    INITIAL_INTERVAL = 1010 * MILLISECOND # ms
     trickle_timer.start()
     trickle_timer.interval = INITIAL_INTERVAL
     trickle_timer._start_next_interval()
@@ -75,12 +77,12 @@ def test_interval_doubling(sim_engine):
         pass
 
     one_slotframe = sim_engine.settings.tsch_slotframeLength
-    i_min = 1000
-    i_max = 2
+    i_min = 1000 * MILLISECOND
+    i_doublings = 2
 
-    trickle_timer = TrickleTimer(i_min, i_max, K, _callback)
+    trickle_timer = TrickleTimer(i_min, i_doublings, K, _callback)
     # set one slotframe long to the interval manually (for test purpose)
-    INITIAL_INTERVAL = 1010 # ms
+    INITIAL_INTERVAL = 1010 * MILLISECOND # ms
     trickle_timer.start()
     trickle_timer.interval = INITIAL_INTERVAL
     trickle_timer._start_next_interval()
@@ -94,7 +96,7 @@ def test_interval_doubling(sim_engine):
     # doubled interval will exceed the maximum interval. then, the resulting
     # interval should be the maximum value
     u.run_until_asn(sim_engine, sim_engine.getAsn() + one_slotframe * 2)
-    assert trickle_timer.interval == i_min * pow(2, i_max)
+    assert trickle_timer.interval == i_min * pow(2, i_doublings)
 
 
 def test_reset(sim_engine):
@@ -111,8 +113,8 @@ def test_reset(sim_engine):
     trickle_timer.start()
 
     # get ASN of 't' and one of the end of the interval
-    original_event_at_t = sim_engine.uniqueTagSchedule[trickle_timer.unique_tag_base + '_at_t']
-    original_event_at_end_of_interval = sim_engine.uniqueTagSchedule[trickle_timer.unique_tag_base + '_at_i']
+    original_event_at_t = sim_engine.uniqueTagSchedule[trickle_timer.uniqueTag_base + '_at_t']
+    original_event_at_end_of_interval = sim_engine.uniqueTagSchedule[trickle_timer.uniqueTag_base + '_at_i']
 
     u.run_until_asn(sim_engine, sim_engine.getAsn() + 1)
 
@@ -123,8 +125,8 @@ def test_reset(sim_engine):
     assert trickle_timer.interval == Imin
     # events should be re-scheduled accordingly
 
-    assert original_event_at_t is not sim_engine.uniqueTagSchedule[trickle_timer.unique_tag_base + '_at_t']
-    assert original_event_at_end_of_interval is not sim_engine.uniqueTagSchedule[trickle_timer.unique_tag_base + '_at_i']
+    assert original_event_at_t is not sim_engine.uniqueTagSchedule[trickle_timer.uniqueTag_base + '_at_t']
+    assert original_event_at_end_of_interval is not sim_engine.uniqueTagSchedule[trickle_timer.uniqueTag_base + '_at_i']
 
 
 def test_stop(sim_engine):
@@ -137,10 +139,14 @@ def test_stop(sim_engine):
     def _callback():
         pass
 
-    # remove all the scheduled events
-    sim_engine.events = {}
+    # clear all events because there are a lot of events scheduled when initializing sim_engine
+    sim_engine.events = type(sim_engine.events)()
     trickle_timer = TrickleTimer(Imin, Imax, K, _callback)
     trickle_timer.start()
-    assert len(list(sim_engine.events.keys())) == 2
+    assert len(sim_engine.events) == 2
     trickle_timer.stop()
-    assert len(list(sim_engine.events.keys())) == 0
+    assert trickle_timer.state == trickle_timer.STATE_STOPPED 
+    # for all events, it should be cancelled
+    for event in sim_engine.events:
+        assert event.cancelled
+

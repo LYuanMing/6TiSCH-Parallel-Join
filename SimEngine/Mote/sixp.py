@@ -37,7 +37,8 @@ class SixP(object):
         self.mote              = mote
 
         # singletons (quicker access, instead of recreating every time)
-        self.engine            = SimEngine.SimEngine.SimEngine()
+        # self.engine            = SimEngine.SimEngine.SimEngine()
+        self.engine            = SimEngine.MultiNetworkEngine.MultiNetworkSimEngineInstance()
         self.settings          = SimEngine.SimSettings.SimSettings()
         self.log               = SimEngine.SimLog.SimLog().log
 
@@ -216,7 +217,6 @@ class SixP(object):
             # when it receives the request. its timer is restarted with the
             # specified callback and timeout_seconds now.
             transaction.start(callback, timeout_seconds)
-
         # enqueue
         self._tsch_enqueue(packet)
         if transaction:
@@ -339,7 +339,7 @@ class SixP(object):
                 # can be set in send_response()
                 transaction.start(
                     callback        = None,
-                    timeout_seconds = None
+                    timeout_delay   = None
                 )
             except TransactionAdditionError:
                 # SixPTransaction() would raise an exception when there is a
@@ -644,7 +644,8 @@ class SixPTransaction(object):
 
         # keep external instances
         self.mote             = mote
-        self.engine           = SimEngine.SimEngine.SimEngine()
+        # self.engine           = SimEngine.SimEngine.SimEngine()
+        self.engine               = SimEngine.MultiNetworkEngine.MultiNetworkSimEngineInstance()
         self.settings         = SimEngine.SimSettings.SimSettings()
         self.log              = SimEngine.SimLog.SimLog().log
 
@@ -666,7 +667,7 @@ class SixPTransaction(object):
             self.peerMac      = self.responder
         else:
             self.peerMac      = self.initiator
-        self.event_unique_tag = u'{0}-{1}-{2}-{3}'.format(
+        self.event_uniqueTag = u'{0}-{1}-{2}-{3}'.format(
             self.mote.id,
             self.initiator,
             self.responder,
@@ -713,17 +714,16 @@ class SixPTransaction(object):
     def set_callback(self, callback):
         self.callback = callback
 
-    def start(self, callback, timeout_seconds):
+    def start(self, callback, timeout_delay):
         self.set_callback(callback)
-
-        if timeout_seconds is None:
+        if timeout_delay is None:
             # use the default timeout value
-            timeout_seconds = self._get_default_timeout_seconds()
+            timeout_delay = self._get_default_timeout_seconds()
 
         self.engine.scheduleIn(
-            delay          = timeout_seconds,
+            delay          = timeout_delay,
             cb             = self.timeout_handler,
-            uniqueTag      = self.event_unique_tag,
+            uniqueTag      = self.event_uniqueTag,
             intraSlotOrder = d.INTRASLOTORDER_STACKTASKS,
         )
 
@@ -792,7 +792,7 @@ class SixPTransaction(object):
 
     def invalidate(self):
         # remove its timeout event if it exists
-        self.engine.removeFutureEvent(self.event_unique_tag)
+        self.engine.removeFutureEvent(self.event_uniqueTag)
 
         # delete the transaction from the 6P transaction table
         self.mote.sixp.delete_transaction(self)

@@ -6,6 +6,7 @@ from __future__ import division
 
 from builtins import str
 from builtins import object
+import inspect
 from past.utils import old_div
 import math
 import random
@@ -18,14 +19,15 @@ class TrickleTimer(object):
     STATE_STOPPED = u'stopped'
     STATE_RUNNING = u'running'
 
-    def __init__(self, i_min, i_max, k, callback):
+    def __init__(self, i_min, i_doublings, k, callback):
         assert isinstance(i_min, (int, int))
-        assert isinstance(i_max, (int, int))
+        assert isinstance(i_doublings, (int, int))
         assert isinstance(k, (int, int))
         assert callback is not None
 
         # shorthand to singletons
-        self.engine   = SimEngine.SimEngine.SimEngine()
+        # self.engine   = SimEngine.SimEngine.SimEngine()
+        self.engine   = SimEngine.MultiNetworkEngine.MultiNetworkSimEngineInstance()
         self.settings = SimEngine.SimSettings.SimSettings()
 
         # constants of this timer instance
@@ -33,9 +35,10 @@ class TrickleTimer(object):
         # max_interval is expected to be described as a number of doublings of the
         # minimum interval size
         self.min_interval = i_min
-        self.max_interval = self.min_interval * pow(2, i_max)
+        self.max_interval = self.min_interval * pow(2, i_doublings)
+        
         self.redundancy_constant = k
-        self.unique_tag_base = str(id(self))
+        self.uniqueTag_base = str(id(self))
 
         # variables
         self.counter = 0
@@ -46,6 +49,12 @@ class TrickleTimer(object):
     @property
     def is_running(self):
         return self.state == self.STATE_RUNNING
+
+    def set_callback(self, callback):
+        if callable(callback) and inspect.isfunction(callback):
+            self.user_callback = callback
+        else:
+            raise ValueError("The callback should be a function")
 
     def start(self):
         # Section 4.2:
@@ -58,8 +67,8 @@ class TrickleTimer(object):
         self._start_next_interval()
 
     def stop(self):
-        self.engine.removeFutureEvent(self.unique_tag_base + u'_at_i')
-        self.engine.removeFutureEvent(self.unique_tag_base + u'_at_t')
+        self.engine.removeFutureEvent(self.uniqueTag_base + u'_at_i')
+        self.engine.removeFutureEvent(self.uniqueTag_base + u'_at_t')
         self.state = self.STATE_STOPPED
 
     def reset(self):
@@ -109,7 +118,7 @@ class TrickleTimer(object):
         #       random point in the interval, taken from the range [I/2, I),
         #       that is, values greater than or equal to I/2 and less than I.
         #       The interval ends at I.
-        slot_len = self.settings.tsch_slotDuration * 1000 # convert to ms
+        slot_len = self.settings.tsch_slotDuration
         t = old_div((1 + random.random()) * self.interval, 2)
         asn = self.engine.getAsn() + int(math.ceil(old_div(t, slot_len)))
         if asn == self.engine.getAsn():
@@ -130,11 +139,12 @@ class TrickleTimer(object):
         self.engine.scheduleAtAsn(
             asn            = asn,
             cb             = _callback,
-            uniqueTag      = self.unique_tag_base + u'_at_t',
-            intraSlotOrder = d.INTRASLOTORDER_STACKTASKS)
+            uniqueTag      = self.uniqueTag_base + u'_at_t',
+            intraSlotOrder = d.INTRASLOTORDER_STACKTASKS
+        )
 
     def _schedule_event_at_end_of_interval(self):
-        slot_len = self.settings.tsch_slotDuration * 1000 # convert to ms
+        slot_len = self.settings.tsch_slotDuration # convert to ms
         asn = self.engine.getAsn() + int(math.ceil(old_div(self.interval, slot_len)))
 
         def _callback():
@@ -153,5 +163,5 @@ class TrickleTimer(object):
         self.engine.scheduleAtAsn(
             asn            = asn,
             cb             = _callback,
-            uniqueTag      = self.unique_tag_base + u'_at_i',
+            uniqueTag      = self.uniqueTag_base + u'_at_i',
             intraSlotOrder = d.INTRASLOTORDER_STACKTASKS)

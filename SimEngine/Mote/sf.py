@@ -36,7 +36,8 @@ class SchedulingFunctionBase(object):
 
         # singletons (quicker access, instead of recreating every time)
         self.settings        = SimEngine.SimSettings.SimSettings()
-        self.engine          = SimEngine.SimEngine.SimEngine()
+        # self.engine          = SimEngine.SimEngine.SimEngine()
+        self.engine          = SimEngine.MultiNetworkEngine.MultiNetworkSimEngineInstance()
         self.log             = SimEngine.SimLog.SimLog().log
 
     # ======================= public ==========================================

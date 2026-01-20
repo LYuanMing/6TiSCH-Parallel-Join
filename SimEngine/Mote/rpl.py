@@ -15,6 +15,7 @@ from __future__ import division
 
 from builtins import str
 from builtins import object
+import traceback
 from past.utils import old_div
 import random
 import math
@@ -29,7 +30,7 @@ import numpy
 import SimEngine
 from . import MoteDefines as d
 from .trickle_timer import TrickleTimer
-
+from SimEngine.SimEngineDefines import SECOND
 # =========================== defines =========================================
 
 # =========================== helpers =========================================
@@ -38,12 +39,12 @@ from .trickle_timer import TrickleTimer
 
 class Rpl(object):
 
-    DEFAULT_DIO_INTERVAL_MIN = 14
+    DEFAULT_DIO_INTERVAL_MIN = SECOND
     DEFAULT_DIO_INTERVAL_DOUBLINGS = 9
     DEFAULT_DIO_REDUNDANCY_CONSTANT = 3
 
     # locally-defined constants
-    DEFAULT_DIS_INTERVAL_SECONDS = 60
+    DEFAULT_DIS_INTERVAL_SECONDS = 60 * SECOND
 
     def __init__(self, mote):
 
@@ -51,7 +52,8 @@ class Rpl(object):
         self.mote                      = mote
 
         # singletons (quicker access, instead of recreating every time)
-        self.engine                    = SimEngine.SimEngine.SimEngine()
+        # self.engine                    = SimEngine.SimEngine.SimEngine()
+        self.engine                    = SimEngine.MultiNetworkEngine.MultiNetworkSimEngineInstance()
         self.settings                  = SimEngine.SimSettings.SimSettings()
         self.log                       = SimEngine.SimLog.SimLog().log
 
@@ -59,10 +61,10 @@ class Rpl(object):
         self.dodagId                   = None
         self.of                        = RplOFNone(self)
         self.trickle_timer             = TrickleTimer(
-            i_min    = pow(2, self.DEFAULT_DIO_INTERVAL_MIN),
-            i_max    = self.DEFAULT_DIO_INTERVAL_DOUBLINGS,
-            k        = self.DEFAULT_DIO_REDUNDANCY_CONSTANT,
-            callback = self._send_DIO
+            i_min          = self.DEFAULT_DIO_INTERVAL_MIN,
+            i_doublings    = self.DEFAULT_DIO_INTERVAL_DOUBLINGS,
+            k              = self.DEFAULT_DIO_REDUNDANCY_CONSTANT,
+            callback       = self._send_DIO
         )
         self.parentChildfromDAOs       = {}      # dictionary containing parents of each node
         self._tx_stat                  = {}      # indexed by mote_id
@@ -300,7 +302,6 @@ class Rpl(object):
                 u'packet_length': d.PKT_LEN_DIO
             }
         }
-
         return newDIO
 
     def action_receiveDIO(self, packet):

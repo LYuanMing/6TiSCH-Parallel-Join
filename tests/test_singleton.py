@@ -1,13 +1,13 @@
 import pytest
 
-from SimEngine.SimEngine import SimEngine
+from SimEngine.MultiNetworkEngine import MultiNetworkSimEngineInstance
 from SimEngine.SimSettings import SimSettings
 from SimEngine.SimLog import SimLog
 from SimEngine.Connectivity import Connectivity
 
 # =========================== fixtures ========================================
 
-@pytest.fixture(params=[SimSettings, SimEngine, Connectivity, SimLog])
+@pytest.fixture(params=[SimSettings, MultiNetworkSimEngineInstance, Connectivity, SimLog])
 def singleton_class(request):
     return request.param
 

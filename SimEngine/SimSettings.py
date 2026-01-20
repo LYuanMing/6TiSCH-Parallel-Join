@@ -16,6 +16,12 @@ import math
 import os
 import re
 
+from SimEngine.SimEngineDefines import SECOND
+
+import threading
+import traceback
+
+
 # =========================== defines =========================================
 
 # =========================== body ============================================
@@ -72,10 +78,10 @@ class SimSettings(object):
                     # convert "minutes" to "slot
                     self.exec_numSlotframesPerRun = int(
                         math.ceil(
-                            self.exec_minutesPerRun *
-                            60 /
-                            self.tsch_slotDuration /
-                            self.tsch_slotframeLength
+                            self.exec_minutesPerRun * 60 * SECOND 
+                            /
+                            (self.tsch_slotDuration *
+                            self.tsch_slotframeLength)
                         )
                     )
                     # invdalite self.exec_minutesPerRun for the sake
@@ -98,7 +104,7 @@ class SimSettings(object):
             cls._instance = None
             cls._init = False
             raise
-
+        
     def setLogDirectory(self, log_directory_name):
         self.logDirectory = log_directory_name
 
@@ -128,7 +134,6 @@ class SimSettings(object):
                     pass
                 else:
                     raise
-
         # file
         if self.cpuID is None:
             tempname = 'output.dat'

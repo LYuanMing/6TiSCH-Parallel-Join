@@ -6,10 +6,15 @@ from __future__ import division
 
 from builtins import zip
 from builtins import range
+import sys
+import threading
+import traceback
 from past.utils import old_div
 import copy
 import pytest
 import types
+
+from SimEngine.SimEngineDefines import SECOND
 
 from . import test_utils as u
 import SimEngine.Mote.MoteDefines as d
@@ -295,7 +300,7 @@ def test_tx_cell_selection(
 
     for log in logs:
         slotframe = mote.tsch.slotframes[0]
-        cell = slotframe.get_cells_at_asn(log['_asn'])[0]
+        cell = slotframe.get_cells_at_asn(sim_engine.global_time_to_asn(log['_global_time'], sim_engine.default_network_id))[0]
         assert cell.options == expected_cellOptions
 
 @pytest.fixture(params=[d.PKT_TYPE_EB, d.PKT_TYPE_DIO])
@@ -396,7 +401,6 @@ def test_retransmission_backoff_algorithm(sim_engine, cell_type):
     slotframe_length = sim_engine.settings.tsch_slotframeLength
 
     #== test setup ==
-
     u.run_until_everyone_joined(sim_engine)
 
     # make hop_1 ready to send an application packet
@@ -431,12 +435,12 @@ def test_retransmission_backoff_algorithm(sim_engine, cell_type):
     assert len(hop_1.tsch.txQueue) == 1
 
     #== start test ==
-    asn_starting_test = sim_engine.getAsn()
+    start_point = sim_engine.global_time
     # run the simulator until hop_1 drops the packet or the simulation ends
     def drop_packet(self, packet, reason):
         if packet['type'] == d.PKT_TYPE_DATA:
             # pause the simulator
-            sim_engine.pauseAtAsn(sim_engine.getAsn() + 1)
+            sim_engine.pauseAt(sim_engine.global_time + sim_engine.settings.tsch_slotDuration)
     hop_1.drop_packet = types.MethodType(drop_packet, hop_1)
     u.run_until_end(sim_engine)
 
@@ -445,7 +449,7 @@ def test_retransmission_backoff_algorithm(sim_engine, cell_type):
     # - retransmission backoff worked
     logs = u.read_log_file(
         filter     = [SimLog.LOG_TSCH_TXDONE['type']],
-        after_asn  = asn_starting_test
+        after_global_time  = start_point
     )
     app_data_tx_logs = []
     for log in logs:
@@ -472,14 +476,14 @@ def test_retransmission_backoff_algorithm(sim_engine, cell_type):
         raise NotImplementedError()
 
     for log in app_data_tx_logs:
-        slot_offset = log['_asn'] % slotframe_length
+        slot_offset = sim_engine.global_time_to_asn(log['_global_time'],sim_engine.default_network_id) % slotframe_length
         assert slot_offset == expected_cell_offset
 
     # retransmission should be performed after backoff wait; we should see gaps
     # between consecutive retransmissions. If all the gaps are 101 slots, that
     # is, one slotframe, this means there was no backoff wait between
     # transmissions.
-    timestamps = [log['_asn'] for log in app_data_tx_logs]
+    timestamps = [sim_engine.global_time_to_asn(log['_global_time'],sim_engine.default_network_id) for log in app_data_tx_logs]
     diffs = [x[1] - x[0] for x in zip(timestamps[:-1], timestamps[1:])]
     assert len([diff for diff in diffs if diff != slotframe_length]) > 0
 
@@ -704,7 +708,7 @@ def test_pending_bit(sim_engine, fixture_pending_bit_enabled):
         assert logs[1]['slot_offset'] == None
         assert logs[1]['channel_offset'] == None
         assert logs[0]['channel'] == logs[1]['channel']
-        assert logs[1]['_asn'] - logs[0]['_asn'] == 1
+        assert sim_engine.global_time_to_asn(logs[1]['_global_time'], sim_engine.default_network_id) - sim_engine.global_time_to_asn(logs[0]['_global_time'], sim_engine.default_network_id) == 1
     else:
         # two DATA packets should be sent on the shared cell in different slot
         # frames
@@ -714,7 +718,7 @@ def test_pending_bit(sim_engine, fixture_pending_bit_enabled):
         assert logs[1]['channel_offset'] == 1
         assert logs[0]['channel'] != logs[1]['channel']
         assert (
-            (logs[1]['_asn'] - logs[0]['_asn']) ==
+            sim_engine.global_time_to_asn(logs[1]['_global_time'], sim_engine.default_network_id) - sim_engine.global_time_to_asn(logs[0]['_global_time'], sim_engine.default_network_id) ==
             sim_engine.settings.tsch_slotframeLength
         )
 
@@ -878,7 +882,7 @@ def test_eb_wait_timer(sim_engine, fixture_clock_source):
         sim_engine,
         (
             sim_engine.getAsn() +
-            old_div(d.TSCH_MAX_EB_DELAY, sim_engine.settings.tsch_slotDuration) - 1
+            old_div(d.TSCH_MAX_EB_DELAY * SECOND, sim_engine.settings.tsch_slotDuration) - 1
         )
     )
     assert mote_1.tsch.isSync is False
@@ -934,7 +938,7 @@ def test_desync(
         fixture_frame_from_root,
         fixture_keep_alive_interval
 ):
-    tsch_slotDuration = 0.01
+    tsch_slotDuration = 0.01 * SECOND
     tsch_slotframeLength = 101
     exec_numSlotframesPerRun = 1000
     if fixture_keep_alive_interval < 0:
@@ -995,7 +999,7 @@ def test_desync(
         assert len(logs) == 1
         log = logs[0]
         assert log['_mote_id'] == mote.id
-        assert log['_asn'] == d.TSCH_DESYNCHRONIZED_TIMEOUT_SLOTS
+        assert sim_engine.global_time_to_asn(log['_global_time'], sim_engine.default_network_id) == d.TSCH_DESYNCHRONIZED_TIMEOUT_SLOTS
 
 def test_tx_queue_of_infinite_size(sim_engine):
     sim_engine = sim_engine(

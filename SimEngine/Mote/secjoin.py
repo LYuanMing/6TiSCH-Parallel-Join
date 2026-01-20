@@ -12,6 +12,8 @@ from past.utils import old_div
 import copy
 import random
 
+from SimEngine.SimEngineDefines import SECOND
+
 # Mote sub-modules
 from . import MoteDefines as d
 
@@ -28,7 +30,7 @@ from SimEngine.Mote.sf import SchedulingFunctionMSF
 class SecJoin(object):
 
     # parameters from draft-ietf-6tisch-minimal-security
-    TIMEOUT_BASE          = 10
+    TIMEOUT_BASE          = 10 * SECOND
     TIMEOUT_RANDOM_FACTOR = 1.5
     MAX_RETRANSMIT        = 4
 
@@ -38,7 +40,8 @@ class SecJoin(object):
         self.mote                           = mote
 
         # singletons (quicker access, instead of recreating every time)
-        self.engine                         = SimEngine.SimEngine.SimEngine()
+        # self.engine                         = SimEngine.SimEngine.SimEngine()
+        self.engine                         = SimEngine.MultiNetworkEngine.MultiNetworkSimEngineInstance()
         self.settings                       = SimEngine.SimSettings.SimSettings()
         self.log                            = SimEngine.SimLog.SimLog().log
 
