@@ -67,7 +67,7 @@ class DiscreteEventEngine(threading.Thread, metaclass=SingletonMeta):
             self.exc                            = None
             self.uniqueTagSchedule              = {}
             self.random_seed                    = None
-            self.global_time                    = 0 # in us
+            self.global_time                    = 0
             self.time_step                      = TIME_STEP
             self.time_resolution                = TIME_RESOLUTION
             self.events                         = []
@@ -91,8 +91,8 @@ class DiscreteEventEngine(threading.Thread, metaclass=SingletonMeta):
 
                 if self.is_alive():
                     # thread is start'ed
-                    self.play()           # cause one more loop in thread
                     self._actionEndSim()  # causes self.gOn to be set to False
+                    self.play()           # cause one more loop in thread
                     self.join(timeout=10)           # wait until thread is dead
                     assert not self.is_alive()
                 # destroy the singleton
@@ -257,7 +257,7 @@ class DiscreteEventEngine(threading.Thread, metaclass=SingletonMeta):
         """
 
         # make sure we are scheduling in the future
-        assert event.time > self.global_time
+        assert event.time > self.global_time, self.global_time
 
         # remove all events with same uniqueTag (the event will be rescheduled)
         self.removeFutureEvent(event.uniqueTag)

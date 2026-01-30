@@ -17,11 +17,14 @@ ROOT_DIR         = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'
 CONFIG_FILE_PATH = os.path.join(ROOT_DIR, 'bin/config.json')
 
 def run_until_asn(sim_engine, target_asn):
+    run_until_(sim_engine, sim_engine.asn_to_global_time(target_asn,sim_engine.default_network_id))
+
+def run_until_(sim_engine, target_global_time):
     """
     (re)start the simulator, run until some ASN, pause
     """
     # arm a pause at the target ASN
-    sim_engine.pauseAt(sim_engine.asn_to_global_time(target_asn,sim_engine.default_network_id))
+    sim_engine.pauseAt(target_global_time)
 
     if sim_engine.is_alive():
         # resume

@@ -7,10 +7,11 @@ from __future__ import absolute_import
 
 # =========================== imports =========================================
 
-# Mote sub-modules
+import bisect
 from builtins import object
 
-from SimEngine.SimEngineDefines import SECOND
+# Mote sub-modules
+from SimEngine.SimEngineDefines import MILLISECOND, SECOND
 from . import MoteDefines as d
 
 # Simulator-wide modules
@@ -38,10 +39,16 @@ class Radio(object):
         self.log                            = SimEngine.SimLog.SimLog().log
 
         # local variables
-        self.onGoingTransmission            = None    # ongoing transmission (used by propagate)
-        self.txPower                        = 0       # dBm
-        self.antennaGain                    = 0       # dBi
-        self.noisepower                     = -105    # dBm
+        self.AckWait                        = MILLISECOND
+        self.data_rate                      = 250000                        # 250kbps
+        self.bit_duration                   = int(SECOND / self.data_rate)  # time unit
+        self.byte_duration                  = self.bit_duration * 8
+        self.capture_threshold              = 6                             # db
+        self.capture_duration               = 40 * self.bit_duration        # Preamble(4 bytes) + SFD (1 bytes)
+        self.onGoingTransmission            = None                          # ongoing transmission (used by propagate)
+        self.txPower                        = 0                             # dBm
+        self.antennaGain                    = 0                             # dBi
+        self.noisepower                     = -105                          # dBm
         self.state                          = d.RADIO_STATE_OFF
         self.channel                        = None
         self.stats = {
@@ -75,9 +82,12 @@ class Radio(object):
         self.channel = channel
 
         # record ongoing, for propagation model
+        start_time = self.engine.global_time + self.mote.tsch.clock.get_drift()
         self.onGoingTransmission = {
             u'channel': channel,
             u'packet':  packet,
+            u'start_time': start_time,
+            u'end_time':   start_time + self.capture_duration + self.byte_duration * packet[u'pkt_len']
         }
 
     def txDone(self, isACKed):
@@ -107,12 +117,35 @@ class Radio(object):
         self.channel = None
 
     # RX
+    def close(self):
+        """close the radio"""
+        pass
+
 
     def startRx(self, channel):
         assert channel in d.TSCH_HOPPING_SEQUENCE
-        assert self.state != d.RADIO_STATE_RX
-        self.state = d.RADIO_STATE_RX
+        assert self.state != d.RADIO_STATE_LISTENING
+
         self.channel = channel
+        # start time should be earlier than transmission
+        start_time_drift = self.mote.tsch.clock.get_drift()
+        start_time = self.engine.global_time + start_time_drift
+        reception = {
+            # listening channel
+            u'channel': self.channel,
+            # mote id
+            u'mote': self.mote,
+            # time at which the packet starts receving
+            u'rx_time': start_time,
+            # the transmission which it lock on
+            u'locked_transmission': None,
+            u'deleted': False
+        }
+        if self.mote.radio.channel not in self.engine.connectivity.reception_queue:
+            self.engine.connectivity.reception_queue[self.mote.radio.channel] = []
+
+        bisect.insort(self.engine.connectivity.reception_queue[self.mote.radio.channel], reception, key=lambda x:x[u'rx_time'])
+        self.mote.radio.state = d.RADIO_STATE_LISTENING
 
     def rxDone(self, packet):
         """end of RX radio activity"""

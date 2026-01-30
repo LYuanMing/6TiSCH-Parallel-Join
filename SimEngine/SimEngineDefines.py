@@ -10,7 +10,7 @@ elif TIME_RESOLUTION == 'us':
     SECOND = 1_000_000
     MILLISECOND = 1_000
     MICROSECOND = 1
-TIME_STEP = MILLISECOND
+TIME_STEP = MICROSECOND * 100  # 100 microseconds
 
 
 class EventView(NamedTuple):

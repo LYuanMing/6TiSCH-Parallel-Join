@@ -22,6 +22,9 @@ For vscode, you can also configure the Run And Debug in launch.json with followi
 
 ```json
 {
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
         {
@@ -49,7 +52,6 @@ For vscode, you can also configure the Run And Debug in launch.json with followi
             },
             "args": [
                 "-s",
-                "-x",
                 "-vv",
                 "tests"
             ]
@@ -71,6 +73,24 @@ For vscode, you can also configure the Run And Debug in launch.json with followi
                 "-vv",
                 "${relativeFile}",
             ],
+        },
+        {
+            "name": "Debug pytest current test function",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "pytest",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "env": {
+                "GEVENT_SUPPORT": "True"
+            },
+            "args": [
+                "-s",
+                "-x",
+                "-vv",
+                "${relativeFile}::${selectedText}"
+            ]
         }
     ]
 }

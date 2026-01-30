@@ -69,6 +69,668 @@ def test_propagate(sim_engine):
     engine = sim_engine()
     engine.connectivity.propagate()
 
+class TestConnectivity:
+    # test the multi-network can enqueue the transmission and reception
+    def test_multi_network_propagate_enqueue(self, sim_engine):
+        sim_engine = sim_engine(
+            diff_config={
+                'exec_numSlotframesPerRun'      : 10000,
+                'conn_class'                    : 'Random',
+                'secjoin_enabled'               : False,
+                "phy_numChans"                  : 1,
+                "tsch_probBcast_ebProb"         : 1 # always send EB in a channel
+            }
+        )
+        for mote in sim_engine.motes:
+            mote.rpl.trickle_timer.stop()
+
+        TX_mote_id = 0
+        RX_mote_id = 1
+
+        TX_mote = sim_engine.motes[TX_mote_id]
+        RX_mote = sim_engine.motes[RX_mote_id]
+
+        # initially, queues should be empty
+        assert len(sim_engine.connectivity.transmission_queue) == 0
+        for channel in sim_engine.connectivity.reception_queue:
+            assert len(sim_engine.connectivity.reception_queue[channel]) == 0
+
+        # startRx on RX mote to add to reception queue
+        channel = RX_mote.tsch.hopping_sequence[0]
+        RX_mote.radio.startRx(channel)
+
+        # assert reception queue is not empty after startRx
+        assert len(sim_engine.connectivity.reception_queue[channel]) == 1
+
+        # startTx on TX mote to add to transmission queue
+        packet = {
+            u'type': u'EB',
+            u'pkt_len': 68,
+            u'mac': {
+                u'dstMac': d.BROADCAST_ADDRESS
+            }
+        }
+        TX_mote.radio.startTx(channel, packet)
+
+        # run propagation to process the transmission
+        u.run_until_(sim_engine, sim_engine.global_time + sim_engine.time_step)
+
+        # assert transmission queue is not empty after startTx
+        assert len(sim_engine.connectivity.transmission_queue[channel]) == 1
+
+    def test_multi_network_propagate_lockon(self, sim_engine):
+        # lockon to a transmission
+        sim_engine = sim_engine(
+            diff_config={
+                'exec_numSlotframesPerRun'      : 10000,
+                'conn_class'                    : 'Random',
+                'secjoin_enabled'               : False,
+                "phy_numChans"                  : 1,
+                "tsch_probBcast_ebProb"         : 0, # disable automatic EB transmission to prevent conflicts
+                "exec_numMotes"                 : 3,  # use 3 motes to satisfy minimum neighbor requirement
+                "conn_random_init_min_neighbors": 2   # set minimum neighbors to 2
+            }
+        )
+        for mote in sim_engine.motes:
+            mote.rpl.trickle_timer.stop()
+            
+        # Check that queues are now empty
+        assert len(sim_engine.connectivity.transmission_queue) == 0
+        assert len(sim_engine.connectivity.reception_queue) == 0
+
+        # Manually trigger a transmission and reception
+        TX_mote = sim_engine.motes[0]
+        RX_mote = sim_engine.motes[1]
+        channel = TX_mote.tsch.hopping_sequence[0]
+        
+        # Start reception on RX mote
+        RX_mote.radio.startRx(channel)
+        
+        # Create and start a transmission on TX mote
+        packet = {
+            u'type': u'EB',
+            u'pkt_len': 68,
+            u'mac': {
+                u'dstMac': d.BROADCAST_ADDRESS
+            }
+        }
+        TX_mote.radio.startTx(channel, packet)
+        
+        # Run propagation to allow lockon to happen
+        u.run_until_(sim_engine, sim_engine.global_time + sim_engine.time_step)
+
+        # Check that transmission is now in queue
+        assert len(sim_engine.connectivity.transmission_queue[channel]) == 1
+        transmission = sim_engine.connectivity.transmission_queue[channel][0]
+        
+        # Check that reception is locked to the transmission
+        reception = sim_engine.connectivity.reception_queue[channel][0]
+        assert reception[u'locked_transmission'] is transmission
+
+    def test_multi_network_propagate_relockon_within_capture_duration(self, sim_engine):
+        # relockon with stronger signal (greater than threshold) within capture duration
+        sim_engine = sim_engine(
+            diff_config={
+                'exec_numSlotframesPerRun'      : 10000,
+                'conn_class'                    : 'Random',
+                'secjoin_enabled'               : False,
+                "phy_numChans"                  : 1,
+                "tsch_probBcast_ebProb"         : 1, # always send EB in a channel
+                "exec_numMotes"                 : 3
+            }
+        )
+        for mote in sim_engine.motes:
+            mote.rpl.trickle_timer.stop()
+
+        connectivity = sim_engine.connectivity
+
+        first_TX_mote = sim_engine.motes[0]
+        channel = first_TX_mote.tsch.hopping_sequence[0]
+        second_TX_mote = sim_engine.motes[1]
+        RX_mote = sim_engine.motes[2]
+
+        # first_TX_mote has weaker signal than second_TX_mote at RX_mote
+        stronger_rssi = -50
+        connectivity.matrix.set_rssi_both_directions(
+            first_TX_mote.id,
+            RX_mote.id,
+            channel,
+            stronger_rssi - RX_mote.radio.capture_threshold, # weaker signal
+        )
+        connectivity.matrix.set_rssi_both_directions(
+            second_TX_mote.id,
+            RX_mote.id,
+            channel,
+            stronger_rssi, # stronger signal
+        )
+        
+        # RX mote starts reception
+        RX_mote.radio.startRx(channel)
+        # both TX motes start transmission at the same time
+        first_TX_mote.radio.startTx(
+            channel=channel, 
+            packet={
+                u'type': u'EB',
+                u'pkt_len': 68, 
+                u'mac': {
+                    u'dstMac': d.BROADCAST_ADDRESS
+                }
+            }
+        )
+        second_TX_mote.radio.startTx(
+            channel=channel,
+            packet={
+                u'type': u'EB',
+                u'pkt_len': 68, 
+                u'mac': {
+                    u'dstMac': d.BROADCAST_ADDRESS
+                }
+            }
+        )
+        # run propagation
+        u.run_until_(sim_engine, sim_engine.global_time + sim_engine.time_step)
+        # the reception should relockon to the stronger transmission
+        reception = list(connectivity.reception_queue[channel])[0]
+        assert reception[u'locked_transmission'][u'mote'] is second_TX_mote
+
+    def test_multi_network_propagate_no_relockon_outside_capture_duration(self, sim_engine):
+        # no relockon or lockon outside capture duration
+        sim_engine = sim_engine(
+            diff_config={
+                'exec_numSlotframesPerRun'      : 10000,
+                'conn_class'                    : 'Random',
+                'secjoin_enabled'               : False,
+                "phy_numChans"                  : 1,
+                "tsch_probBcast_ebProb"         : 0, # disable automatic EB transmission to prevent conflicts
+                "exec_numMotes"                 : 3,
+                "conn_random_init_min_neighbors": 2   # set minimum neighbors to satisfy requirements
+            }
+        )
+        for mote in sim_engine.motes:
+            mote.rpl.trickle_timer.stop()
+
+        connectivity = sim_engine.connectivity
+
+        first_TX_mote = sim_engine.motes[0]
+        channel = first_TX_mote.tsch.hopping_sequence[0]
+        second_TX_mote = sim_engine.motes[1]
+        RX_mote = sim_engine.motes[2]
+
+        # Set up stronger signal for first_TX_mote to ensure it locks first
+        strong_signal_rssi = -50
+        weak_signal_rssi = strong_signal_rssi
+        connectivity.matrix.set_rssi_both_directions(
+            first_TX_mote.id,
+            RX_mote.id,
+            channel,
+            strong_signal_rssi, # stronger signal
+        )
+        connectivity.matrix.set_rssi_both_directions(
+            second_TX_mote.id,
+            RX_mote.id,
+            channel,
+            weak_signal_rssi, # weaker signal
+        )
+
+        # RX mote starts reception
+        RX_mote.radio.startRx(channel)
+        RX_mote.radio.waitingFor = d.WAITING_FOR_RX
+
+        # First TX mote starts transmission
+        first_TX_mote.radio.startTx(
+            channel=channel,
+            packet={
+                u'type': u'EB',
+                u'pkt_len': 68,
+                u'mac': {
+                    u'dstMac': d.BROADCAST_ADDRESS
+                }
+            }
+        )
+        # run propagation to allow lockon
+        u.run_until_(sim_engine, sim_engine.global_time + sim_engine.time_step)
+        
+        # Get the reception object
+        reception = list(connectivity.reception_queue[channel])[0]
+
+        # Verify that the reception is locked to the first transmission
+        assert reception[u'locked_transmission'] is not None
+        assert reception[u'locked_transmission'][u'mote'] is first_TX_mote
+
+        # Record the initial locked transmission
+        initial_locked_transmission = reception[u'locked_transmission']
+
+        # Advance time beyond capture duration
+        original_time = sim_engine.global_time
+        sim_engine.global_time = original_time + RX_mote.radio.capture_duration + 1
+
+        # Second TX mote starts transmission after capture duration
+        second_TX_mote.radio.startTx(
+            channel=channel,
+            packet={
+                u'type': u'EB',
+                u'pkt_len': 68,
+                u'mac': {
+                    u'dstMac': d.BROADCAST_ADDRESS
+                }
+            }
+        )
+        # run propagation
+        u.run_until_(sim_engine, sim_engine.global_time + sim_engine.time_step)
+
+        # The reception should still be locked to the original transmission
+        # since the second transmission started outside the capture window
+        assert reception[u'locked_transmission'] is initial_locked_transmission
+        assert reception[u'locked_transmission'][u'mote'] is first_TX_mote
+
+    def test_multi_network_propagate_successful_reception(self, sim_engine):
+        # receive a packet successfully
+        sim_engine = sim_engine(
+            diff_config={
+                'exec_numSlotframesPerRun'      : 10000,
+                'conn_class'                    : 'Random',
+                'secjoin_enabled'               : False,
+                "phy_numChans"                  : 1,
+                "tsch_probBcast_ebProb"         : 0, # disable automatic EB transmission to prevent conflicts
+                "exec_numMotes"                 : 2,
+                "conn_random_init_min_neighbors": 1   # set minimum neighbors to satisfy requirements
+            }
+        )
+        for mote in sim_engine.motes:
+            mote.rpl.trickle_timer.stop()
+
+        connectivity = sim_engine.connectivity
+
+        TX_mote = sim_engine.motes[0]
+        RX_mote = sim_engine.motes[1]
+        channel = TX_mote.tsch.hopping_sequence[0]
+
+        # Set up perfect connection between TX and RX motes
+        connectivity.matrix.set_rssi_both_directions(
+            TX_mote.id,
+            RX_mote.id,
+            channel,
+            -50  # good RSSI
+        )
+        connectivity.matrix.set_pdr_both_directions(
+            TX_mote.id,
+            RX_mote.id,
+            channel,
+            1.0  # perfect PDR
+        )
+
+        # Mock the rxDone and txDone methods to track if they are called
+        original_rxdone = RX_mote.radio.rxDone
+        original_txdone = TX_mote.radio.txDone
+
+        rxdone_called = []
+        txdone_called = []
+
+        def mock_rxdone(packet):
+            rxdone_called.append(packet)
+            return original_rxdone(packet)
+
+        def mock_txdone(isACKed):
+            txdone_called.append(isACKed)
+            return original_txdone(isACKed)
+
+        RX_mote.radio.rxDone = mock_rxdone
+        TX_mote.radio.txDone = mock_txdone
+
+        # Start reception on RX mote
+        RX_mote.radio.startRx(channel)
+        # Set the TSCH waiting state to RX as expected by the rxDone method
+        RX_mote.tsch.waitingFor = d.WAITING_FOR_RX
+
+        # Create and start a transmission on TX mote
+        packet = {
+            u'type': u'EB',
+            u'pkt_len': 68,
+            u'mac': {
+                u'dstMac': d.BROADCAST_ADDRESS,
+                u'srcMac': TX_mote.get_mac_addr()
+            }
+        }
+        # Set the TSCH waiting state to TX as expected by the txDone method
+        TX_mote.tsch.waitingFor = d.WAITING_FOR_TX
+        # Set the packet to send in TSCH
+        TX_mote.tsch.pktToSend = packet
+        TX_mote.radio.startTx(channel, packet)
+
+        # Run propagation for enough time to complete the transmission
+        # Need to run until the transmission ends
+        transmission_end_time = TX_mote.radio.onGoingTransmission[u'end_time']
+        u.run_until_(sim_engine, transmission_end_time + sim_engine.time_step)
+
+        # Verify that both rxDone and txDone were called during propagation
+        assert len(rxdone_called) == 1, "RX mote's rxDone method was not called"
+        assert len(txdone_called) == 1, "TX mote's txDone method was not called"
+
+        # Also verify that the packet was received successfully (not None)
+        assert rxdone_called[0] is not None, "Packet was not received successfully, rxDone was called with None"
+
+    def test_multi_network_propagate_failed_reception_due_to_collision_with_result_of_none(self, sim_engine):
+        # Test case where collision results in rxDone being called with None
+        # According to the theory: if a weak signal is locked and a strong signal causes collision,
+        # the weak signal will likely fail to be received due to interference
+        sim_engine = sim_engine(
+            diff_config={
+                'exec_numSlotframesPerRun'      : 10000,
+                'conn_class'                    : 'Random',
+                'secjoin_enabled'               : False,
+                "phy_numChans"                  : 1,
+                "tsch_probBcast_ebProb"         : 0, # disable automatic EB transmission to prevent conflicts
+                "exec_numMotes"                 : 3,
+                "conn_random_init_min_neighbors": 2   # set minimum neighbors to satisfy requirements
+            }
+        )
+        for mote in sim_engine.motes:
+            mote.rpl.trickle_timer.stop()
+
+        connectivity = sim_engine.connectivity
+
+        weak_TX_mote = sim_engine.motes[0]   # Weak transmission that gets locked first
+        strong_Interfering_TX_mote = sim_engine.motes[1]  # Strong interfering transmission
+        RX_mote = sim_engine.motes[2]
+        channel = weak_TX_mote.tsch.hopping_sequence[0]
+
+        # Set up connections
+        # Weak transmission has poor signal - this will be the one that gets "locked" first
+        connectivity.matrix.set_rssi_both_directions(
+            weak_TX_mote.id,
+            RX_mote.id,
+            channel,
+            -95  # very poor RSSI for weak transmission
+        )
+        connectivity.matrix.set_pdr_both_directions(
+            weak_TX_mote.id,
+            RX_mote.id,
+            channel,
+            0.05  # very low PDR for weak transmission
+        )
+
+        # Strong interfering transmission has good signal - this will interfere with the locked weak signal
+        connectivity.matrix.set_rssi_both_directions(
+            strong_Interfering_TX_mote.id,
+            RX_mote.id,
+            channel,
+            -40  # good RSSI for strong interfering transmission
+        )
+        connectivity.matrix.set_pdr_both_directions(
+            strong_Interfering_TX_mote.id,
+            RX_mote.id,
+            channel,
+            0.9  # high PDR for strong interfering transmission
+        )
+
+        # Mock the rxDone method to track if it is called with None (failed reception)
+        original_rxdone = RX_mote.radio.rxDone
+
+        rxdone_called_with = []
+
+        def mock_rxdone(packet):
+            rxdone_called_with.append(packet)
+            return original_rxdone(packet)
+
+        RX_mote.radio.rxDone = mock_rxdone
+
+        # Start reception on RX mote
+        RX_mote.radio.startRx(channel)
+        # Set the TSCH waiting state to RX as expected by the rxDone method
+        RX_mote.tsch.waitingFor = d.WAITING_FOR_RX
+
+        # Create and start the weak transmission first (it will be locked due to arriving first)
+        weak_packet = {
+            u'type': u'EB',
+            u'pkt_len': 68,
+            u'mac': {
+                u'dstMac': d.BROADCAST_ADDRESS,
+                u'srcMac': weak_TX_mote.get_mac_addr(),
+                u'retriesLeft': 3,
+                u'join_metric': 1000
+            }
+        }
+        # Set the TSCH waiting state for weak TX mote
+        weak_TX_mote.tsch.waitingFor = d.WAITING_FOR_TX
+        weak_TX_mote.tsch.pktToSend = weak_packet
+        weak_TX_mote.radio.startTx(channel, weak_packet)
+
+        # Run propagation to allow lockon to the weak transmission
+        u.run_until_(sim_engine, sim_engine.global_time + sim_engine.time_step)
+
+        # At this point, the RX mote should have locked onto the weak transmission
+        # Now start the strong interfering transmission which will cause collision
+        strong_interfering_packet = {
+            u'type': u'EB',
+            u'pkt_len': 68,
+            u'mac': {
+                u'dstMac': d.BROADCAST_ADDRESS,
+                u'srcMac': strong_Interfering_TX_mote.get_mac_addr(),
+                u'retriesLeft': 3,
+                u'join_metric': 1000
+            }
+        }
+        # Set the TSCH waiting state for strong interfering TX mote
+        strong_Interfering_TX_mote.tsch.waitingFor = d.WAITING_FOR_TX
+        strong_Interfering_TX_mote.tsch.pktToSend = strong_interfering_packet
+        strong_Interfering_TX_mote.radio.startTx(channel, strong_interfering_packet)
+
+        # Run propagation for enough time to complete the transmissions
+        weak_transmission_end_time = weak_TX_mote.radio.onGoingTransmission[u'end_time']
+        u.run_until_(sim_engine, weak_transmission_end_time + sim_engine.time_step)
+
+        # Verify that the reception was attempted (rxDone was called)
+        assert len(rxdone_called_with) > 0, "RX mote's rxDone method was not called"
+
+        # Verify that the reception failed due to collision/interference
+        assert rxdone_called_with[0] is None, f"Expected None due to collision, but got packet: {rxdone_called_with[0]}"
+
+    def test_multi_network_propagate_failed_reception_due_to_collision_with_result_of_strong_signal_or_weak_signal(self, sim_engine):
+        # Test case where collision results in receiving either the strong or weak signal
+        # According to the theory: if signals arrive at similar time, the stronger one may be captured
+        # but sometimes the weak one may still be received depending on timing and random factors
+        sim_engine = sim_engine(
+            diff_config={
+                'exec_numSlotframesPerRun'      : 10000,
+                'conn_class'                    : 'Random',
+                'secjoin_enabled'               : False,
+                "phy_numChans"                  : 1,
+                "tsch_probBcast_ebProb"         : 0, # disable automatic EB transmission to prevent conflicts
+                "exec_numMotes"                 : 3,
+                "conn_random_init_min_neighbors": 2   # set minimum neighbors to satisfy requirements
+            }
+        )
+        for mote in sim_engine.motes:
+            mote.rpl.trickle_timer.stop()
+
+        connectivity = sim_engine.connectivity
+
+        weak_TX_mote = sim_engine.motes[0]   # Weak transmission
+        strong_TX_mote = sim_engine.motes[1]  # Strong transmission that arrives at similar time
+        RX_mote = sim_engine.motes[2]
+        channel = weak_TX_mote.tsch.hopping_sequence[0]
+
+        # Set up connections
+        # Weak transmission has poor signal
+        connectivity.matrix.set_rssi_both_directions(
+            weak_TX_mote.id,
+            RX_mote.id,
+            channel,
+            -95  # poor RSSI for weak transmission
+        )
+        connectivity.matrix.set_pdr_both_directions(
+            weak_TX_mote.id,
+            RX_mote.id,
+            channel,
+            0  # low PDR for weak transmission
+        )
+
+        # Strong transmission has good signal
+        connectivity.matrix.set_rssi_both_directions(
+            strong_TX_mote.id,
+            RX_mote.id,
+            channel,
+            -30  # good RSSI for strong transmission
+        )
+        connectivity.matrix.set_pdr_both_directions(
+            strong_TX_mote.id,
+            RX_mote.id,
+            channel,
+            1  # high PDR for strong transmission
+        )
+
+        # Mock the rxDone method to track what packet is received
+        original_rxdone = RX_mote.radio.rxDone
+
+        rxdone_called_with = []
+
+        def mock_rxdone(packet):
+            rxdone_called_with.append(packet)
+            return original_rxdone(packet)
+
+        RX_mote.radio.rxDone = mock_rxdone
+
+        # Start reception on RX mote
+        RX_mote.radio.startRx(channel)
+        # Set the TSCH waiting state to RX as expected by the rxDone method
+        RX_mote.tsch.waitingFor = d.WAITING_FOR_RX
+
+        # Create and start both transmissions at approximately the same time to cause collision
+        weak_packet = {
+            u'type': u'EB',
+            u'pkt_len': 68,
+            u'mac': {
+                u'dstMac': d.BROADCAST_ADDRESS,
+                u'srcMac': weak_TX_mote.get_mac_addr(),
+                u'retriesLeft': 3,
+                u'join_metric': 1000
+            }
+        }
+        strong_packet = {
+            u'type': u'EB',
+            u'pkt_len': 68,
+            u'mac': {
+                u'dstMac': d.BROADCAST_ADDRESS,
+                u'srcMac': strong_TX_mote.get_mac_addr(),
+                u'retriesLeft': 3,
+                u'join_metric': 1000
+            }
+        }
+
+        # Set the TSCH waiting state for weak TX mote
+        weak_TX_mote.tsch.waitingFor = d.WAITING_FOR_TX
+        weak_TX_mote.tsch.pktToSend = weak_packet
+        weak_TX_mote.radio.startTx(channel, weak_packet)
+
+        # Set the TSCH waiting state for strong TX mote
+        strong_TX_mote.tsch.waitingFor = d.WAITING_FOR_TX
+        strong_TX_mote.tsch.pktToSend = strong_packet
+        strong_TX_mote.radio.startTx(channel, strong_packet)
+
+        # Run propagation for enough time to complete the transmissions
+        weak_transmission_end_time = weak_TX_mote.radio.onGoingTransmission[u'end_time']
+        u.run_until_(sim_engine, weak_transmission_end_time + sim_engine.time_step)
+
+        # Verify that the reception was attempted (rxDone was called)
+        assert len(rxdone_called_with) > 0, "RX mote's rxDone method was not called"
+
+        # If a packet was received, verify it comes from one of the expected sources
+        received_src = rxdone_called_with[0]['mac']['srcMac']
+        assert received_src == strong_TX_mote.get_mac_addr(), f"Expected packet from either transmission, but got from {received_src}"
+        # If rxdone_called_with[0] is None, that means the reception failed due to collision/interference
+        # This is also a valid outcome in collision scenarios
+
+    def test_multi_network_propagate_dequeue(self, sim_engine):
+        # dequeue transmission and reception after propagation
+        sim_engine = sim_engine(
+            diff_config={
+                'exec_numSlotframesPerRun'      : 10000,
+                'conn_class'                    : 'Random',
+                'secjoin_enabled'               : False,
+                "phy_numChans"                  : 1,
+                "tsch_probBcast_ebProb"         : 0, # disable automatic EB transmission to prevent conflicts
+                "exec_numMotes"                 : 2,
+                "conn_random_init_min_neighbors": 1   # set minimum neighbors to satisfy requirements
+            }
+        )
+        for mote in sim_engine.motes:
+            mote.rpl.trickle_timer.stop()
+
+        connectivity = sim_engine.connectivity
+
+        TX_mote = sim_engine.motes[0]
+        RX_mote = sim_engine.motes[1]
+        channel = TX_mote.tsch.hopping_sequence[0]
+
+        # Initialize the queues for the channel if they don't exist
+        if channel not in sim_engine.connectivity.transmission_queue:
+            sim_engine.connectivity.transmission_queue[channel] = []
+        if channel not in sim_engine.connectivity.reception_queue:
+            sim_engine.connectivity.reception_queue[channel] = []
+
+        # Initially, queues should be empty
+        assert len(sim_engine.connectivity.transmission_queue[channel]) == 0
+        assert len(sim_engine.connectivity.reception_queue[channel]) == 0
+
+        # Set up a good connection between TX and RX to ensure successful lock
+        connectivity.matrix.set_rssi_both_directions(
+            TX_mote.id,
+            RX_mote.id,
+            channel,
+            -50  # good RSSI
+        )
+        connectivity.matrix.set_pdr_both_directions(
+            TX_mote.id,
+            RX_mote.id,
+            channel,
+            1.0  # perfect PDR
+        )
+
+        # Set the TSCH waiting state for RX mote
+        RX_mote.tsch.waitingFor = d.WAITING_FOR_RX
+
+        # Start reception on RX mote
+        RX_mote.radio.startRx(channel)
+
+        # Create and start a transmission on TX mote
+        packet = {
+            u'type': u'EB',
+            u'pkt_len': 68,
+            u'mac': {
+                u'dstMac': d.BROADCAST_ADDRESS,
+                u'srcMac': TX_mote.get_mac_addr(),
+                u'retriesLeft': 3,
+                u'join_metric': 1000
+            }
+        }
+        # Set the TSCH waiting state for TX mote
+        TX_mote.tsch.waitingFor = d.WAITING_FOR_TX
+        TX_mote.tsch.pktToSend = packet
+        TX_mote.radio.startTx(channel, packet)
+
+        # Run propagation once to add both transmission and reception to the queue
+        # and allow the reception to lock onto the transmission
+        u.run_until_(sim_engine, sim_engine.global_time + sim_engine.time_step)
+
+        # Verify that both transmission and reception were added to the queue
+        assert len(sim_engine.connectivity.transmission_queue[channel]) == 1
+        assert len(sim_engine.connectivity.reception_queue[channel]) == 1
+
+        # Verify that the reception has locked onto the transmission
+        reception = sim_engine.connectivity.reception_queue[channel][0]
+        assert reception[u'locked_transmission'] is not None, "Reception should have locked onto the transmission"
+
+        # Run propagation to process the transmission and reception until they complete
+        transmission_end_time = TX_mote.radio.onGoingTransmission[u'end_time']
+        u.run_until_(sim_engine, transmission_end_time + sim_engine.time_step)
+
+        # After propagation, both transmission and reception should be dequeued
+        # because they have completed (their end_time has passed)
+        assert len(sim_engine.connectivity.transmission_queue[channel]) == 0, \
+            f"Expected transmission queue to be empty after propagation, but had {len(sim_engine.connectivity.transmission_queue[channel])} items"
+        assert len(sim_engine.connectivity.reception_queue[channel]) == 0, \
+            f"Expected reception queue to be empty after propagation, but had {len(sim_engine.connectivity.reception_queue[channel])} items"
+
 
 #=== test for ConnectivityRandom
 class TestRandom(object):

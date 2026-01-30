@@ -9,6 +9,7 @@ from builtins import str
 from builtins import filter
 from builtins import range
 from builtins import object
+from dataclasses import asdict, dataclass
 from past.utils import old_div
 import copy
 from itertools import chain
@@ -16,7 +17,8 @@ import random
 
 import netaddr
 
-from SimEngine.SimEngineDefines import SECOND
+from SimEngine.SimEngineDefines import MILLISECOND, SECOND
+from SimEngine.Mote.NetDefines import Packet
 
 # Mote sub-modules
 from . import MoteDefines as d
@@ -45,6 +47,7 @@ class Tsch(object):
         self.log      = SimEngine.SimLog.SimLog().log
 
         # local variables
+        self.guard_time       = 3 * MILLISECOND
         self.slotframes       = {}
         self.txQueue          = []
         if self.settings.tsch_tx_queue_size >= 0:
@@ -240,6 +243,11 @@ class Tsch(object):
         )
         del self.slotframes[slotframe_handle]
 
+    # packet
+    def create_packet(self, packet_info):
+        packet = Packet.from_dict(packet_info)
+        return packet
+
     # EB / Enhanced Beacon
 
     def startSendingEBs(self):
@@ -361,10 +369,12 @@ class Tsch(object):
         return None
 
     def enqueue(self, packet, priority=False):
-
         assert packet[u'type'] != d.PKT_TYPE_EB
         assert u'srcMac' in packet[u'mac']
         assert u'dstMac' in packet[u'mac']
+        assert u'pkt_len' in packet
+
+        packet = Packet.from_dict(packet)
 
         goOn = True
 
@@ -706,13 +716,11 @@ class Tsch(object):
         active_cell = self.active_cell
 
         self.active_cell = None
-
         # copy the received packet to a new packet instance since the passed
         # "packet" should be kept as it is so that Connectivity can use it
         # after this rxDone() process.
         new_packet = copy.deepcopy(packet)
         packet = new_packet
-
         # make sure I'm in the right state
         assert self.waitingFor == d.WAITING_FOR_RX
 
@@ -847,7 +855,7 @@ class Tsch(object):
         """
 
         assert not self.getIsSync()
-
+        
         # choose random channel
         channel = random.choice(self.hopping_sequence)
 
@@ -1156,7 +1164,8 @@ class Tsch(object):
                     u'srcMac':      self.mote.get_mac_addr(),
                     u'dstMac':      d.BROADCAST_ADDRESS,     # broadcast
                     u'join_metric': self.mote.rpl.getDagRank() - 1
-                }
+                },
+                u'pkt_len':        d.PKT_LEN_EB,  # bytes
             }
 
             # log
@@ -1545,10 +1554,8 @@ class Clock(object):
             # clock.
             error = 0
         elif self._last_clock_access:
-            assert self._last_clock_access <= self.engine.getAsn()
-            slot_duration = self.engine.settings.tsch_slotDuration
-            elapsed_slots = self.engine.getAsn() - self._last_clock_access
-            elapsed_time  = elapsed_slots * slot_duration
+            assert self._last_clock_access <= self.engine.global_time
+            elapsed_time  = self.engine.global_time - self._last_clock_access
             error = elapsed_time * self._error_rate
         else:
             # self._last_clock_access is None; we're desynchronized.
@@ -1559,7 +1566,7 @@ class Clock(object):
         if error:
             # update the variables
             self._accumulated_error += error
-            self._last_clock_access = self.engine.getAsn()
+            self._last_clock_access = self.engine.global_time
 
             # return the result
             return self._clock_off_on_sync + self._accumulated_error

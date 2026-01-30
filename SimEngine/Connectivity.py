@@ -19,6 +19,7 @@ from __future__ import division
 
 # =========================== imports =========================================
 
+import bisect
 from builtins import zip
 from builtins import str
 from builtins import object
@@ -32,7 +33,7 @@ import datetime as dt
 import json
 import itertools
 
-from SimEngine.SimEngineDefines import SECOND
+from SimEngine.SimEngineDefines import SECOND, Event
 
 from . import SimSettings
 from . import SimLog
@@ -77,6 +78,10 @@ class Connectivity(object):
 
         # short-hands and local variables
         self.num_channels = self.settings.phy_numChans
+        
+        # store the ongoing transmissions by channels
+        self.transmission_queue = {}
+        self.reception_queue = {}
 
         # instantiate a connectivity matrix
         conn_class_name = self.settings.conn_class
@@ -85,7 +90,8 @@ class Connectivity(object):
         self.matrix = matrix_class(self)
 
         # schedule propagation task
-        self._schedule_propagate()
+        # self._schedule_propagate()
+        self._schedule_multi_network_propagate()
 
     def destroy(self):
         cls           = type(self)
@@ -105,6 +111,155 @@ class Connectivity(object):
         assert channel in d.TSCH_HOPPING_SEQUENCE
 
         return self.matrix.get_rssi(src_id, dst_id, channel)
+
+    def delete_transmission(self, mote_id, channel=None):
+        """ Delete transmission for a given mote_id """
+        if channel is not None and channel in self.transmission_queue:
+            for transmission in self.transmission_queue[channel]:
+                if transmission[u'mote'].id == mote_id:
+                    transmission[u'deleted'] = True
+        else:
+            for channel in self.transmission_queue:
+                for transmission in self.transmission_queue[channel]:
+                    if transmission[u'mote'].id == mote_id:
+                        transmission[u'deleted'] = True
+
+    def delete_reception(self, mote_id, channel=None):
+        """ Delete reception for a given mote_id """
+        if channel is not None and channel in self.reception_queue:
+            for reception in self.reception_queue[channel]:
+                if reception[u'mote'].id == mote_id:
+                    reception[u'deleted'] = True
+        else:
+            for channel in self.reception_queue:
+                for reception in self.reception_queue[channel]:
+                    if reception[u'mote'].id == mote_id:
+                        reception[u'deleted'] = True
+
+    def multi_network_propagate(self):
+        """ Simulate the propagation of frames in a slot. """
+        new_transmission = []
+        # get all motes start TXing or RXing at this point
+        for mote in self.engine.motes:
+            # get all transmissions
+            # for all TX motes, open its radio and organize all transmission in channels
+            if mote.radio.state == d.RADIO_STATE_TX:
+                assert mote.radio.onGoingTransmission
+                packet = mote.radio.onGoingTransmission[u'packet']
+                transmission = {
+                    # channel
+                    u'channel': mote.radio.onGoingTransmission[u'channel'],
+                    # packet
+                    u'mote': mote,
+                    u'packet': packet,
+                    # time at which the packet starts transmitting
+                    u'tx_time': mote.radio.onGoingTransmission[u'start_time'],
+                    # time at which the packet ends transmitting
+                    u'end_time': mote.radio.onGoingTransmission[u'end_time'],
+                    # duration of this transmission
+                    u'duration': mote.radio.onGoingTransmission[u'end_time'] - mote.radio.onGoingTransmission[u'start_time'],
+                    # whether this transmission is acknowledged or not
+                    u'deleted': False
+                }
+                if transmission[u'channel'] not in self.transmission_queue:
+                    self.transmission_queue[transmission[u'channel']] = []
+                
+                bisect.insort(self.transmission_queue[transmission[u'channel']], transmission, key=lambda x: x[u'tx_time'])
+                bisect.insort(new_transmission, transmission, key=lambda x: x[u'tx_time'])
+                mote.radio.state = d.RADIO_STATE_TRANSMITTING
+        # for each new transmission, check whether any radio lock on it 
+        for transmission in new_transmission:
+            # if the CCA is enabled, then its logic starts from here
+            # ends CCA
+            if transmission[u'deleted'] is True:
+                continue
+            # check all RX motes who haven't locked on, iterate all transmissions to decide which transmission it would lock on 
+            for reception in self.reception_queue[transmission[u'channel']]:
+                if reception[u'deleted'] is True:
+                    continue
+                if reception[u'rx_time'] >= transmission[u'tx_time']:
+                    if reception[u'locked_transmission'] is None:
+                        reception[u'locked_transmission'] = transmission
+                    else:
+                    # if this reception is locked, 
+                    # then check whether this transmission is within the locked transmission's capture duration
+                    # and whether it is stronger than the locked transmission
+                        previous_transmission = reception[u'locked_transmission']
+                        # assume that the chip enables Frame Re-synchronization
+                        if (abs(previous_transmission[u'tx_time'] - transmission[u'tx_time']) <= reception[u'mote'].radio.capture_duration):
+                            previous_rssi = self.get_rssi(previous_transmission[u'mote'].id, reception[u'mote'].id, transmission[u'channel'])
+                            current_rssi = self.get_rssi(transmission[u'mote'].id, reception[u'mote'].id, transmission[u'channel'])
+                            if (current_rssi - previous_rssi) >= reception[u'mote'].radio.capture_threshold:
+                                reception[u'locked_transmission'] = transmission
+                            elif (current_rssi - previous_rssi) > 0 and (current_rssi - previous_rssi) <= reception[u'mote'].radio.capture_threshold:
+                                # lock the transmission based on the PDR
+                                random_value = random.random()
+                                preamble_pdr = self.get_pdr(
+                                    src_id=previous_transmission[u'mote'].id,
+                                    dst_id=reception[u'mote'].id,
+                                    channel=transmission[u'channel']
+                                )
+                                if random_value < preamble_pdr:
+                                    reception[u'locked_transmission'] = transmission
+                    
+
+        # check whether reception is finished or not
+        for channel in self.reception_queue:
+            for reception in self.reception_queue[channel]:
+                # if the transmission is locked and ends at this point
+                if reception[u'locked_transmission'] is not None:
+                    if self.engine.global_time >= reception[u'locked_transmission'][u'end_time']:
+                        # check this transmission is received or not
+                        lockon_transmission = reception[u'locked_transmission']
+                        lockon_random_value = random.random()
+                        interfering_transmissions = []
+                        # for all transmissions which ends before this transmission's start time or starts after this transmission's end time,
+                        # view them as interference
+                        for t in self.transmission_queue[channel]:
+                            if t is lockon_transmission:
+                                continue
+                            # 0.1 here is the interfering threshold, it is quite conservative value
+                            # interfering threshold here means that if the transmission overlap time is greater than this ratio, 
+                            # it is considered to cause interference to lockon transmission
+                            if t[u'end_time'] > (lockon_transmission[u'tx_time'] + 0.1 * lockon_transmission[u'duration']) or t[u'tx_time'] < (lockon_transmission[u'end_time'] - 0.1 * lockon_transmission[u'duration']):
+                                interfering_transmissions.append(t)
+                        packet_pdr = self._compute_pdr_with_interference(
+                            listener_id=reception[u'mote'].id,
+                            lockon_transmission=lockon_transmission,
+                            interfering_transmissions=interfering_transmissions
+                        )
+                        if lockon_random_value < packet_pdr:
+                            # packet received!
+                            reception[u'mote'].radio.rxDone(
+                                packet=lockon_transmission[u'packet']
+                            )
+                            reception[u'deleted'] = True
+                        else:
+                            # receive nothing
+                            reception[u'mote'].radio.rxDone(
+                                packet=None
+                            )
+                            reception[u'deleted'] = True
+            self.reception_queue[channel] = [reception for reception in self.reception_queue[channel] if reception[u'deleted'] is False]
+
+        # check whether transmission is finished or not
+        for channel in self.transmission_queue:
+            for transmission in self.transmission_queue[channel]:
+                # if the transmission ends then close its radio
+                if self.engine.global_time >= transmission[u'end_time']:
+                    transmission[u'mote'].radio.txDone(False)
+                    transmission[u'deleted'] = True
+            self.transmission_queue[channel] = [transmission for transmission in self.transmission_queue[channel] if transmission[u'deleted'] is False]
+        self._schedule_multi_network_propagate()
+    
+    def _schedule_multi_network_propagate(self):
+        # schedule propagation every time step
+        self.engine.scheduleAtPreciseTime(Event(
+            time            = self.engine.global_time + self.engine.time_step,
+            callback        = self.multi_network_propagate,
+            uniqueTag       = (None, u'Connectivity.multi_network_propagate'),
+            intraSlotOrder  = d.INTRASLOTORDER_PROPAGATE
+        ))
 
     def propagate(self):
         """ Simulate the propagation of frames in a slot. """
@@ -375,7 +530,7 @@ class Connectivity(object):
         channel = lockon_transmission[u'channel']
         for t in interfering_transmissions:
             assert t[u'channel'] == channel
-        lockon_tx_mote_id = lockon_transmission[u'tx_mote_id']
+        lockon_tx_mote_id = lockon_transmission[u'mote'].id
 
         # === compute the SINR
 
@@ -398,7 +553,7 @@ class Connectivity(object):
 
         totalInterference_mW = 0.0
         for interfering_tran in interfering_transmissions:
-            interfering_tx_mote_id = interfering_tran[u'tx_mote_id']
+            interfering_tx_mote_id = interfering_tran[u'mote'].id
             interference_mW = self._dBm_to_mW(
                 self.get_rssi(interfering_tx_mote_id, listener_id, channel)
             )

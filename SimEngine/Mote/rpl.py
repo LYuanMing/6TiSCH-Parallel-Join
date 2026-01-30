@@ -299,8 +299,8 @@ class Rpl(object):
             u'net': {
                 u'srcIp':         self.mote.get_ipv6_link_local_addr(),
                 u'dstIp':         dstIp,
-                u'packet_length': d.PKT_LEN_DIO
-            }
+            },
+            u'pkt_len':           d.PKT_LEN_DIO
         }
         return newDIO
 

@@ -49,7 +49,7 @@ class Sixlowpan(object):
     #======================== public ==========================================
 
     def sendPacket(self, packet):
-        assert sorted(packet.keys()) == sorted([u'type',u'app',u'net'])
+        assert sorted(packet.keys()) == sorted([u'type',u'app',u'net',u'pkt_len'])
         assert packet[u'type'] in [
             d.PKT_TYPE_JOIN_REQUEST,
             d.PKT_TYPE_JOIN_RESPONSE,
@@ -464,12 +464,12 @@ class Fragmentation(object):
 
         returnVal = []
 
-        if  self.settings.tsch_max_payload_len < packet[u'net'][u'packet_length']:
+        if  self.settings.tsch_max_payload_len < packet[u'pkt_len']:
             # the packet needs fragmentation
 
             # choose tag (same for all fragments)
             outgoing_datagram_tag = self._get_next_datagram_tag()
-            number_of_fragments   = int(math.ceil(float(packet[u'net'][u'packet_length']) / self.settings.tsch_max_payload_len))
+            number_of_fragments   = int(math.ceil(float(packet[u'pkt_len']) / self.settings.tsch_max_payload_len))
             datagram_offset       = 0
 
             for i in range(0, number_of_fragments):
@@ -478,7 +478,7 @@ class Fragmentation(object):
                 fragment = {
                     u'type':                d.PKT_TYPE_FRAG,
                     u'net': {
-                        u'datagram_size':   packet[u'net'][u'packet_length'],
+                        u'datagram_size':   packet[u'pkt_len'],
                         u'datagram_tag':    outgoing_datagram_tag,
                         u'datagram_offset': datagram_offset
                     }

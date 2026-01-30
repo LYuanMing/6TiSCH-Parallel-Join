@@ -21,6 +21,8 @@ import copy
 import json
 import traceback
 
+from SimEngine.utils import dataclass_to_dict
+
 from . import SimSettings
 
 # =========================== defines =========================================
@@ -116,12 +118,6 @@ class SimLog(object):
     def __new__(cls, *args, **kwargs):
         if not cls._instance:
             cls._instance = super(SimLog, cls).__new__(cls)
-            import sys
-            print("\n" + "="*40)
-            print("SINGLETON DETECTED INITIALIZATION AT:")
-            # 打印调用堆栈
-            traceback.print_stack(file=sys.stdout)
-            print("="*40 + "\n")
         return cls._instance
     # ==== end singleton
 
@@ -200,7 +196,7 @@ class SimLog(object):
 
         # write line
         try:
-            json_string = json.dumps(content, sort_keys=True)
+            json_string = json.dumps(dataclass_to_dict(content), sort_keys=True)
             self.log_output_file.write(json_string + u'\n')
         except Exception as err:
             output  = []

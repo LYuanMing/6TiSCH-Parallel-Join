@@ -26,7 +26,7 @@ PKT_LEN_DIO                                 = 76
 PKT_LEN_DAO                                 = 20
 PKT_LEN_JOIN_REQUEST                        = 20
 PKT_LEN_JOIN_RESPONSE                       = 20
-
+PKT_LEN_EB                                  = 63
 # === rpl
 RPL_MINHOPRANKINCREASE                      = 256
 RPL_PARENT_SWITCH_RANK_THRESHOLD            = 640
@@ -109,6 +109,8 @@ INTRASLOTORDER_ADMINTASKS                   = 3
 RADIO_STATE_TX                              = u'tx'
 RADIO_STATE_RX                              = u'rx'
 RADIO_STATE_OFF                             = u'off'
+RADIO_STATE_TRANSMITTING                    = u'transmitting'
+RADIO_STATE_LISTENING                       = u'listening'
 
 # === battery
 # Idle: Time slot during which a node listens for data, but receives
@@ -128,3 +130,4 @@ CHARGE_RxDataTxAck_uC                       = 32.6
 CHARGE_RxData_uC                            = 22.6
 # Time slot during which the node’s radio stays off
 CHARGE_Sleep_uC                             = 0.0
+
